@@ -27,7 +27,7 @@ pixi install
 python3 llm.py --help
 ```
 
-### Standalone app (Apple Silicon only)
+### Standalone app 
 
 Build a self-contained `.app` and `.dmg` — no Python or Pixi needed
 to run the result:

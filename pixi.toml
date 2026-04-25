@@ -8,6 +8,9 @@ platforms = ["linux-64", "osx-arm64", "win-64"]
 [dependencies]
 python = ">=3.11"
 
+[tasks]
+llm = "python llm.py"
+
 [target.osx-arm64.pypi-dependencies]
 pyinstaller = ">=6.0"
 

@@ -14,7 +14,7 @@
       --bg:          #f4f4fa;
       --bg-card:     #ffffff;
       --bg-code:     #eaeaf6;
-      --bg-term:     #141428;
+      --bg-term:     #f0f0f8;
       --border:      #dcdcf0;
       --text:        #1a1a30;
       --text-muted:  #6868a0;
@@ -31,6 +31,12 @@
       --shadow:      0 1px 3px rgba(0,0,0,.06), 0 4px 20px rgba(0,0,0,.04);
       --radius:      10px;
       --transition:  .2s ease;
+      --term-text:   #2a2a55;
+      --term-cmd:    #1a6e3c;
+      --term-flag:   #884400;
+      --term-cmt:    #7878a8;
+      --term-out:    #5050a0;
+      --term-hl:     #12124a;
     }
     [data-theme="dark"] {
       --bg:          #09090f;
@@ -49,6 +55,12 @@
       --err:         #f87171;
       --warn:        #fbbf24;
       --shadow:      0 1px 4px rgba(0,0,0,.4), 0 6px 24px rgba(0,0,0,.3);
+      --term-text:   #c8c8f0;
+      --term-cmd:    #a8f0c8;
+      --term-flag:   #f0c8a8;
+      --term-cmt:    #6868a8;
+      --term-out:    #8888b8;
+      --term-hl:     #f0f0ff;
     }
 
     /* ── Reset ───────────────────────────────────────────────────── */
@@ -267,41 +279,26 @@
       margin: 1.25rem 0; box-shadow: var(--shadow);
       position: relative;
     }
-    .term-bar {
-      background: color-mix(in srgb, var(--bg-term) 60%, #fff 8%);
-      padding: .6rem 1rem; display: flex; align-items: center; gap: .45rem;
-      border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-    }
-    .dot {
-      width: 11px; height: 11px; border-radius: 50%;
-    }
-    .dot-r { background: #ff5f56; }
-    .dot-y { background: #ffbd2e; }
-    .dot-g { background: #27c93f; }
-    .term-label {
-      margin-left: auto; font-size: .7rem;
-      color: color-mix(in srgb, var(--text-muted) 50%, transparent);
-      font-family: 'JetBrains Mono', monospace;
-    }
     .copy-btn {
-      margin-left: .5rem; background: none;
-      border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-      border-radius: 4px; padding: .1rem .45rem;
+      position: absolute; top: .55rem; right: .75rem;
+      background: none;
+      border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+      border-radius: 4px; padding: .15rem .5rem;
       font-size: .68rem; color: var(--text-muted);
       cursor: pointer; transition: border-color var(--transition), color var(--transition);
+      font-family: 'Inter', system-ui, sans-serif;
     }
     .copy-btn:hover { border-color: var(--a); color: var(--a); }
     .term-body {
-      padding: 1rem 1.25rem; overflow-x: auto;
+      padding: 1rem 4rem 1rem 1.25rem; overflow-x: auto;
       font-family: 'JetBrains Mono', monospace; font-size: .82rem; line-height: 1.65;
     }
-    .term-body code { background: none; padding: 0; font-size: inherit; color: #c8c8f0; }
-    [data-theme="light"] .term-body code { color: #c8c8f0; }
-    .cmd  { color: #a8f0c8; }
-    .flag { color: #f0c8a8; }
-    .cmt  { color: #6868a8; font-style: italic; }
-    .out  { color: #8888b8; }
-    .hl   { color: #f0f0ff; }
+    .term-body code { background: none; padding: 0; font-size: inherit; color: var(--term-text); }
+    .cmd  { color: var(--term-cmd); }
+    .flag { color: var(--term-flag); }
+    .cmt  { color: var(--term-cmt); font-style: italic; }
+    .out  { color: var(--term-out); }
+    .hl   { color: var(--term-hl); }
 
     /* ── Inline code ─────────────────────────────────────────────── */
     code {
@@ -539,8 +536,6 @@
             <span class="pill pill-accent">ollama</span>
             <span class="pill pill-accent">mlx-lm</span>
             <span class="pill pill-accent">vllm-mlx</span>
-            <span class="pill">Apple Silicon</span>
-            <span class="pill">OpenAI-compatible</span>
           </div>
 
           <div class="hero-cards">
@@ -550,11 +545,11 @@
             </div>
             <div class="hero-card">
               <div class="hero-card-name">mlx-lm</div>
-              <div class="hero-card-desc">Apple Silicon–optimised inference via MLX. OpenAI-compatible server.</div>
+              <div class="hero-card-desc">Optimised inference via the MLX framework.</div>
             </div>
             <div class="hero-card">
               <div class="hero-card-name">vllm-mlx</div>
-              <div class="hero-card-desc">High-throughput vLLM with MLX backend. OpenAI-compatible server.</div>
+              <div class="hero-card-desc">High-throughput inference with the vLLM MLX backend.</div>
             </div>
           </div>
         </div>
@@ -582,13 +577,7 @@
           library.
         </p>
         <div class="term">
-          <div class="term-bar">
-            <span class="dot dot-r"></span>
-            <span class="dot dot-y"></span>
-            <span class="dot dot-g"></span>
-            <span class="term-label">shell</span>
-            <button class="copy-btn" data-copy="git clone &lt;repo&gt;&#10;cd llm&#10;python3 llm.py --help">Copy</button>
-          </div>
+<button class="copy-btn" data-copy="git clone &lt;repo&gt;&#10;cd llm&#10;python3 llm.py --help">Copy</button>
           <div class="term-body"><code>
 <span class="cmd">git clone</span> <span class="flag">&lt;repo&gt;</span>
 <span class="cmd">cd</span> llm
@@ -605,20 +594,14 @@
           </div>
         </div>
 
-        <h3 id="install-app">Standalone app <span class="pill" style="vertical-align:middle;font-size:.7rem">Apple Silicon only</span></h3>
+        <h3 id="install-app">Standalone app</h3>
         <p>
           Build a completely self-contained <code>.app</code> bundle and
           <code>.dmg</code> installer — no Python or Pixi required to run
           the result.
         </p>
         <div class="term">
-          <div class="term-bar">
-            <span class="dot dot-r"></span>
-            <span class="dot dot-y"></span>
-            <span class="dot dot-g"></span>
-            <span class="term-label">shell</span>
-            <button class="copy-btn" data-copy="pixi run build">Copy</button>
-          </div>
+<button class="copy-btn" data-copy="pixi run build">Copy</button>
           <div class="term-body"><code>
 <span class="cmt"># produces dist/llm.app and dist/llm.dmg</span>
 <span class="cmd">pixi run build</span>
@@ -650,11 +633,7 @@
         </div>
 
         <div class="term">
-          <div class="term-bar">
-            <span class="dot dot-r"></span>
-            <span class="dot dot-y"></span>
-            <span class="dot dot-g"></span>
-          </div>
+<button class="copy-btn">Copy</button>
           <div class="term-body"><code>
 <span class="cmt"># Add to ~/.zshrc</span>
 <span class="cmd">export</span> <span class="hl">PATH</span>=<span class="flag">"/Applications/llm.app/Contents/MacOS:$PATH"</span>
@@ -681,12 +660,12 @@
               <tr>
                 <td><code>mlx-lm</code></td>
                 <td><code>pip install mlx-lm</code></td>
-                <td>Apple Silicon only, OpenAI-compatible</td>
+                <td>Inference API server</td>
               </tr>
               <tr>
                 <td><code>vllm-mlx</code></td>
                 <td><code>pip install vllm</code></td>
-                <td>Apple Silicon only, OpenAI-compatible</td>
+                <td>Inference API server</td>
               </tr>
               <tr>
                 <td>HuggingFace CLI</td>
@@ -754,12 +733,7 @@
             prints a combined table labelled by provider.
           </p>
           <div class="term">
-            <div class="term-bar">
-              <span class="dot dot-r"></span>
-              <span class="dot dot-y"></span>
-              <span class="dot dot-g"></span>
-              <span class="term-label">llm ls</span>
-            </div>
+<button class="copy-btn">Copy</button>
             <div class="term-body"><code>
 <span class="out">PROVIDER            MODEL</span>
 <span class="out">------------------  ----------------------------------------</span>
@@ -785,8 +759,8 @@
         <section id="cmd-provider-info">
           <h3>llm provider info</h3>
           <p>
-            Displays the executable path, default port, OpenAI-compatible base
-            URL, model storage directory, and install status for every provider.
+            Displays the executable path, default port, base URL, model storage
+            directory, and install status for every provider.
           </p>
           <div class="card-grid">
             <div class="prov-card">
@@ -839,11 +813,7 @@
             to be installed.
           </p>
           <div class="term">
-            <div class="term-bar">
-              <span class="dot dot-r"></span>
-              <span class="dot dot-y"></span>
-              <span class="dot dot-g"></span>
-            </div>
+<button class="copy-btn">Copy</button>
             <div class="term-body"><code>
 <span class="cmt"># ollama — uses: ollama pull</span>
 <span class="cmd">llm download</span> ollama llama3.2
@@ -865,11 +835,7 @@
             use. Configuration is saved to <code>~/.llm/config.json</code>.
           </p>
           <div class="term">
-            <div class="term-bar">
-              <span class="dot dot-r"></span>
-              <span class="dot dot-y"></span>
-              <span class="dot dot-g"></span>
-            </div>
+<button class="copy-btn">Copy</button>
             <div class="term-body"><code>
 <span class="cmt"># Set a default</span>
 <span class="cmd">llm default</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
@@ -901,18 +867,14 @@
               <thead><tr><th>Provider</th><th>Behaviour</th><th>Default port</th></tr></thead>
               <tbody>
                 <tr><td><code>ollama</code></td><td>Starts an interactive session (<code>ollama run</code>)</td><td>11434</td></tr>
-                <tr><td><code>mlx-lm</code></td><td>Starts an OpenAI-compatible API server</td><td>8080</td></tr>
-                <tr><td><code>vllm-mlx</code></td><td>Starts an OpenAI-compatible API server</td><td>8080</td></tr>
+                <tr><td><code>mlx-lm</code></td><td>Starts an inference API server</td><td>8080</td></tr>
+                <tr><td><code>vllm-mlx</code></td><td>Starts an inference API server</td><td>8080</td></tr>
               </tbody>
             </table>
           </div>
 
           <div class="term">
-            <div class="term-bar">
-              <span class="dot dot-r"></span>
-              <span class="dot dot-y"></span>
-              <span class="dot dot-g"></span>
-            </div>
+<button class="copy-btn">Copy</button>
             <div class="term-body"><code>
 <span class="cmt"># Run the configured default</span>
 <span class="cmd">llm run</span>
@@ -969,11 +931,7 @@
             No arguments are required.
           </p>
           <div class="term">
-            <div class="term-bar">
-              <span class="dot dot-r"></span>
-              <span class="dot dot-y"></span>
-              <span class="dot dot-g"></span>
-            </div>
+<button class="copy-btn">Copy</button>
             <div class="term-body"><code>
 <span class="cmd">llm stop</span>
 <span class="out">Sent SIGTERM to PID 42107.</span>
@@ -991,12 +949,7 @@
 
         <h3>First-time setup</h3>
         <div class="term">
-          <div class="term-bar">
-            <span class="dot dot-r"></span>
-            <span class="dot dot-y"></span>
-            <span class="dot dot-g"></span>
-            <span class="term-label">full workflow</span>
-          </div>
+<button class="copy-btn">Copy</button>
           <div class="term-body"><code>
 <span class="cmt"># 1. Check what's installed and what you already have</span>
 <span class="cmd">llm provider info</span>
@@ -1023,11 +976,7 @@
 
         <h3>mlx-lm with custom flags</h3>
         <div class="term">
-          <div class="term-bar">
-            <span class="dot dot-r"></span>
-            <span class="dot dot-y"></span>
-            <span class="dot dot-g"></span>
-          </div>
+<button class="copy-btn">Copy</button>
           <div class="term-body"><code>
 <span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \
     <span class="flag">--host</span> 0.0.0.0 \
@@ -1039,11 +988,7 @@
 
         <h3>vllm-mlx with custom flags</h3>
         <div class="term">
-          <div class="term-bar">
-            <span class="dot dot-r"></span>
-            <span class="dot dot-y"></span>
-            <span class="dot dot-g"></span>
-          </div>
+<button class="copy-btn">Copy</button>
           <div class="term-body"><code>
 <span class="cmd">llm run</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \
     <span class="flag">--host</span> 0.0.0.0 \
@@ -1055,11 +1000,7 @@
 
         <h3>ollama on a custom port</h3>
         <div class="term">
-          <div class="term-bar">
-            <span class="dot dot-r"></span>
-            <span class="dot dot-y"></span>
-            <span class="dot dot-g"></span>
-          </div>
+<button class="copy-btn">Copy</button>
           <div class="term-body"><code>
 <span class="cmd">llm run</span> ollama llama3.2 <span class="flag">--host</span> 0.0.0.0 <span class="flag">--port</span> 11434
           </code></div>
@@ -1129,8 +1070,8 @@
         <h2>Build &amp; distribute</h2>
         <p>
           <code>pixi run build</code> invokes <strong>PyInstaller</strong> with
-          <code>llm.spec</code> to produce a self-contained
-          <strong>Apple Silicon</strong> <code>.app</code> bundle, then wraps it
+          <code>llm.spec</code> to produce a self-contained <code>.app</code>
+          bundle, then wraps it
           in a distributable <code>.dmg</code> using macOS's built-in
           <code>hdiutil</code>.
         </p>
@@ -1171,12 +1112,7 @@
         </p>
 
         <div class="term">
-          <div class="term-bar">
-            <span class="dot dot-r"></span>
-            <span class="dot dot-y"></span>
-            <span class="dot dot-g"></span>
-            <span class="term-label">build output</span>
-          </div>
+<button class="copy-btn">Copy</button>
           <div class="term-body"><code>
 <span class="cmd">pixi run build</span>
 <span class="out">--- PyInstaller build ---</span>
