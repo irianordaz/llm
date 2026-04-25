@@ -9,7 +9,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 DIST_DIR = Path('dist')
 APP_NAME = 'llm.app'
 DMG_NAME = 'llm.dmg'
@@ -35,8 +34,7 @@ def run_pyinstaller() -> None:
         )
     except FileNotFoundError:
         print(
-            'Error: pyinstaller not found.\n'
-            'Run this via pixi: pixi run build',
+            'Error: pyinstaller not found.\nRun this via pixi: pixi run build',
             file=sys.stderr,
         )
         sys.exit(1)
@@ -60,11 +58,15 @@ def create_dmg() -> None:
 
     subprocess.run(
         [
-            'hdiutil', 'create',
-            '-volname', 'llm',
-            '-srcfolder', str(_TMP_DMG_STAGING),
+            'hdiutil',
+            'create',
+            '-volname',
+            'llm',
+            '-srcfolder',
+            str(_TMP_DMG_STAGING),
             '-ov',
-            '-format', 'UDZO',
+            '-format',
+            'UDZO',
             str(dmg_out),
         ],
         check=True,

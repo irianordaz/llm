@@ -1,0 +1,16 @@
+[project]
+name = "llm"
+version = "0.1.0"
+description = "Unified CLI wrapper for ollama, mlx-lm, and vllm-mlx."
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 80
+include = ["*.py", "**/*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"

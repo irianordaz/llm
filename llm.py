@@ -14,7 +14,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-
 PROVIDERS = ['ollama', 'mlx-lm', 'vllm-mlx']
 
 DEFAULT_HOST = '127.0.0.1'
@@ -38,6 +37,10 @@ PROVIDER_MODEL_DIRS = {
     'ollama': OLLAMA_MODEL_DIR,
     'mlx-lm': HF_CACHE_DIR,
     'vllm-mlx': HF_CACHE_DIR,
+}
+
+DEFAULT_PROVIDER_PATHS: dict[str, str] = {
+    'mlx-lm': '/opt/homebrew/bin/mlx_lm',
 }
 
 LLM_DIR = Path.home() / '.llm'
@@ -136,6 +139,21 @@ def write_config(config: dict) -> None:
     CONFIG_FILE.write_text(json.dumps(config, indent=2))
 
 
+def _get_provider_path(provider: str) -> str | None:
+    """Return the user-configured path, then the built-in default, then None."""
+    config = read_config()
+    configured = config.get('providers', {}).get(provider, {}).get('path')
+    if configured:
+        return configured
+    return DEFAULT_PROVIDER_PATHS.get(provider)
+
+
+def _is_pixi_env(path: str) -> bool:
+    """Return True if path is a directory that contains a pixi.toml."""
+    p = Path(path)
+    return p.is_dir() and (p / 'pixi.toml').exists()
+
+
 def is_process_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -195,10 +213,9 @@ def cmd_ls(args: argparse.Namespace, _: list[str]) -> None:
     ollama_models = get_ollama_models()
     hf_models = get_huggingface_models()
 
-    rows: list[tuple[str, str]] = (
-        [('ollama', m) for m in ollama_models]
-        + [('mlx-lm / vllm-mlx', m) for m in hf_models]
-    )
+    rows: list[tuple[str, str]] = [('ollama', m) for m in ollama_models] + [
+        ('mlx-lm / vllm-mlx', m) for m in hf_models
+    ]
 
     if not rows:
         print('No local models found.')
@@ -236,9 +253,9 @@ def cmd_ps(args: argparse.Namespace, _: list[str]) -> None:
     running = is_process_alive(pid) if pid else False
     status = 'running' if running else 'stopped (stale state)'
 
-    base_url = BASE_URL_TEMPLATES.get(
-        provider, 'http://{host}:{port}'
-    ).format(host=host, port=port)
+    base_url = BASE_URL_TEMPLATES.get(provider, 'http://{host}:{port}').format(
+        host=host, port=port
+    )
 
     w = 10
     print(f'{"Provider":<{w}} {provider}')
@@ -314,22 +331,27 @@ def _build_run_cmd(
     host: str,
     port: int,
     passthrough: list[str],
-) -> list[str]:
+) -> tuple[list[str], str | None]:
+    """Return (command, cwd). cwd is set only when a pixi env directory is used."""
     if provider == 'ollama':
-        return ['ollama', 'run', model] + passthrough
+        return ['ollama', 'run', model] + passthrough, None
+
     if provider == 'mlx-lm':
-        return [
-            _python_executable(), '-m', 'mlx_lm.server',
-            '--model', model,
-            '--host', host,
-            '--port', str(port),
-        ] + passthrough
+        path = _get_provider_path('mlx-lm')
+        if path and Path(path).is_file():
+            cmd = [path, 'server', '--model', model, '--host', host, '--port', str(port)]
+        else:
+            cmd = [_python_executable(), '-m', 'mlx_lm.server', '--model', model, '--host', host, '--port', str(port)]
+        return cmd + passthrough, None
+
     if provider == 'vllm-mlx':
-        return [
-            'vllm', 'serve', model,
-            '--host', host,
-            '--port', str(port),
-        ] + passthrough
+        path = _get_provider_path('vllm-mlx')
+        if path and _is_pixi_env(path):
+            cmd = ['pixi', 'run', 'vllm-mlx', 'serve', model, '--host', host, '--port', str(port)]
+            return cmd + passthrough, path
+        cmd = ['vllm', 'serve', model, '--host', host, '--port', str(port)]
+        return cmd + passthrough, None
+
     print(f'Unknown provider: {provider}', file=sys.stderr)
     sys.exit(1)
 
@@ -357,11 +379,11 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
     if provider == 'ollama':
         env['OLLAMA_HOST'] = f'{host}:{port}'
 
-    cmd = _build_run_cmd(provider, model, host, port, passthrough)
+    cmd, cwd = _build_run_cmd(provider, model, host, port, passthrough)
     print(f'Starting {provider}: {model}  ({host}:{port})')
 
     try:
-        proc = subprocess.Popen(cmd, env=env)
+        proc = subprocess.Popen(cmd, env=env, cwd=cwd)
     except FileNotFoundError:
         print(
             f'Error: {provider} binary not found. Is it installed?',
@@ -369,14 +391,16 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
         )
         sys.exit(1)
 
-    write_state({
-        'provider': provider,
-        'model': model,
-        'host': host,
-        'port': port,
-        'pid': proc.pid,
-        'started_at': datetime.now().isoformat(timespec='seconds'),
-    })
+    write_state(
+        {
+            'provider': provider,
+            'model': model,
+            'host': host,
+            'port': port,
+            'pid': proc.pid,
+            'started_at': datetime.now().isoformat(timespec='seconds'),
+        }
+    )
 
     try:
         proc.wait()
@@ -504,13 +528,25 @@ def _provider_executable(provider: str) -> tuple[str, bool]:
     if provider == 'ollama':
         path = shutil.which('ollama')
         return (path, True) if path else ('not found', False)
+
     if provider == 'mlx-lm':
+        path = _get_provider_path('mlx-lm')
+        if path:
+            exists = Path(path).is_file() and os.access(path, os.X_OK)
+            return (path, exists)
         spec = importlib.util.find_spec('mlx_lm')
-        installed = spec is not None
-        return (f'{sys.executable} -m mlx_lm.server', installed)
+        return (f'{sys.executable} -m mlx_lm.server', spec is not None)
+
     if provider == 'vllm-mlx':
-        path = shutil.which('vllm')
-        return (path, True) if path else ('not found', False)
+        path = _get_provider_path('vllm-mlx')
+        if path:
+            if _is_pixi_env(path):
+                return (f'pixi run vllm-mlx  (cwd: {path})', True)
+            exists = Path(path).is_file() and os.access(path, os.X_OK)
+            return (path, exists)
+        vllm = shutil.which('vllm')
+        return (vllm, True) if vllm else ('not found', False)
+
     return ('unknown', False)
 
 
@@ -536,6 +572,38 @@ def cmd_provider_info(args: argparse.Namespace, _: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: gui
+# ---------------------------------------------------------------------------
+
+
+def cmd_gui(args: argparse.Namespace, _: list[str]) -> None:
+    try:
+        import llm_gui
+    except ImportError:
+        print(
+            'Error: GUI requires wxPython.\n'
+            'Install with: pip install wxPython  (or: pixi install)',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    llm_gui.main()
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: provider set
+# ---------------------------------------------------------------------------
+
+
+def cmd_provider_set(args: argparse.Namespace, _: list[str]) -> None:
+    provider = args.provider
+    path = args.path
+    config = read_config()
+    config.setdefault('providers', {}).setdefault(provider, {})['path'] = path
+    write_config(config)
+    print(f'Set {provider} path: {path}')
+
+
+# ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
 
@@ -553,8 +621,7 @@ def _add_network_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar='PORT',
         help=(
-            'Port number. Defaults: ollama=11434, '
-            'mlx-lm=8080, vllm-mlx=8080.'
+            'Port number. Defaults: ollama=11434, mlx-lm=8080, vllm-mlx=8080.'
         ),
     )
 
@@ -693,6 +760,47 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     info_parser.set_defaults(func=cmd_provider_info)
+
+    set_parser = provider_sub.add_parser(
+        'set',
+        help='Set the executable path for a provider.',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            'Configure the path to a provider executable or directory.\n'
+            'For a pixi-managed provider, set the path to the directory\n'
+            'containing pixi.toml — llm will invoke it with pixi run.\n\n'
+            'Examples:\n'
+            '  llm provider set mlx-lm /opt/homebrew/bin/mlx_lm\n'
+            '  llm provider set vllm-mlx /Users/you/local/vllm-mlx'
+        ),
+    )
+    set_parser.add_argument(
+        'provider',
+        choices=PROVIDERS,
+        help='Provider to configure.',
+    )
+    set_parser.add_argument(
+        'path',
+        metavar='PATH',
+        help=(
+            'Path to the provider executable, or to a directory '
+            'containing pixi.toml for pixi-managed providers.'
+        ),
+    )
+    set_parser.set_defaults(func=cmd_provider_set)
+
+    # -- gui -----------------------------------------------------------------
+    gui_parser = subparsers.add_parser(
+        'gui',
+        help='Launch the desktop GUI (requires wxPython).',
+        description=(
+            'Opens a light-themed wxPython window with all CLI features:\n'
+            'live status of the running model, model list, run/stop/download,\n'
+            'default selection, and provider configuration.'
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    gui_parser.set_defaults(func=cmd_gui)
 
     return parser
 

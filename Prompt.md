@@ -6,5 +6,8 @@ Keep track of which provider was executed to run the model so that the user does
 
 Add a ‘lm provider info’ that provides some information of all providers including base url, port, and path to their executables.
 
-Allow creation of a standalone application using pyinstaller and add a pixi task to build the application that can use the system python3 and does not require Pixi. Create an application bundle .app for MacOS and create an installer .dmg. Support only Apple silicon CPUs. Update the README.md and ‘llm --help’ option and create a docs/index.html for documentation including a dark and light theme, use modern and abstract theme. Update the documentation, installing from source does not require Pixi but Pixi is supported. Executing from the command line requires
-  Python3.
+Allow creation of a standalone application using pyinstaller and add a pixi task to build the application that can use the system python3 and does not require Pixi. Create an application bundle .app for MacOS and create an installer .dmg. Support only Apple silicon CPUs. Update the README.md and ‘llm --help’ option and create a docs/index.html for documentation including a dark and light theme, use modern and abstract theme. Update the documentation, installing from source does not require Pixi but Pixi is supported. Executing from the command line requires Python3.
+  
+Create a pyproject.toml using the guidelines in .rules.md and enforce ruff formatting. Add pixi tasks for ruff format and check. Reformat the code blocks in docs/index.html to not show the borders of cells and remove the empty lines.
+
+Allow the user to specify the paths for the provider executables. The path default for mlx-lm is /opt/homebrew/bin/mlx-lm since it is installed with homebrew. The command mlx-lm has options to serve models and manage. The path to vllm-mlx is /Users/iordaz/local/vllm-mlx but must be executed with pixi (example: pixi run vllm-mlx serve sabeshbesh/qwen3.6-27b-mlx-4bit --port 8080), use the pixi.toml and pixi.lock files in the directories for the provider. If a provider path includes a pixi environment use pixi instead of system python3.

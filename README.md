@@ -79,6 +79,7 @@ Install whichever providers you need separately:
 | `llm default [provider model]` | Show or set the default |
 | `llm download <provider> <model>` | Download a model |
 | `llm provider info` | Show provider details |
+| `llm provider set <provider> <path>` | Set the executable path for a provider |
 
 Run `llm --help` or `llm <command> --help` for full option details.
 
@@ -114,7 +115,7 @@ ollama
   Status        installed
 
 mlx-lm
-  Executable    /usr/bin/python3 -m mlx_lm.server
+  Executable    /opt/homebrew/bin/mlx_lm
   Default port  8080
   Base URL      http://127.0.0.1:8080/v1
   Model dir     /Users/you/.cache/huggingface/hub
@@ -127,6 +128,26 @@ vllm-mlx
   Model dir     /Users/you/.cache/huggingface/hub
   Status        not installed
 ```
+
+### `llm provider set`
+
+Configure the path to a provider executable or pixi environment directory.
+Settings are saved to `~/.llm/config.json`.
+
+If the path is a **directory containing `pixi.toml`**, `llm` invokes the
+provider with `pixi run` from that directory instead of using the system
+Python.
+
+```bash
+# Set the mlx-lm executable (default is /opt/homebrew/bin/mlx_lm)
+llm provider set mlx-lm /opt/homebrew/bin/mlx_lm
+
+# Point vllm-mlx at a pixi environment directory
+llm provider set vllm-mlx /path/to/vllm-mlx
+```
+
+After setting a path, `llm provider info` reflects the new executable and
+`llm run` uses it immediately.
 
 ### `llm download`
 
@@ -249,4 +270,4 @@ llm stop
 | File | Purpose |
 |---|---|
 | `~/.llm/state.json` | Active session — provider, model, PID, port |
-| `~/.llm/config.json` | Saved default provider and model |
+| `~/.llm/config.json` | Saved default provider, model, and provider paths |
