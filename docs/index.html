@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="llm — unified CLI wrapper for ollama, mlx-lm, and vllm-mlx" />
+  <title>llm · LLM Provider Wrapper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Variables ───────────────────────────────────────────────── */
+    :root {
+      --bg:          #f4f4fa;
+      --bg-card:     #ffffff;
+      --bg-code:     #eaeaf6;
+      --bg-term:     #141428;
+      --border:      #dcdcf0;
+      --text:        #1a1a30;
+      --text-muted:  #6868a0;
+      --a:           #7c3aed;
+      --b:           #0ea5e9;
+      --grad:        linear-gradient(135deg, #7c3aed 0%, #0ea5e9 100%);
+      --orb-a:       rgba(124,  58, 237, 0.10);
+      --orb-b:       rgba( 14, 165, 233, 0.08);
+      --ok:          #059669;
+      --err:         #dc2626;
+      --warn:        #d97706;
+      --nav-w:       240px;
+      --hdr-h:       56px;
+      --shadow:      0 1px 3px rgba(0,0,0,.06), 0 4px 20px rgba(0,0,0,.04);
+      --radius:      10px;
+      --transition:  .2s ease;
+    }
+    [data-theme="dark"] {
+      --bg:          #09090f;
+      --bg-card:     #101018;
+      --bg-code:     #0f0f1d;
+      --bg-term:     #0a0a16;
+      --border:      #1e1e34;
+      --text:        #d4d4f0;
+      --text-muted:  #7070a8;
+      --a:           #a78bfa;
+      --b:           #38bdf8;
+      --grad:        linear-gradient(135deg, #a78bfa 0%, #38bdf8 100%);
+      --orb-a:       rgba(167, 139, 250, 0.16);
+      --orb-b:       rgba( 56, 189, 248, 0.12);
+      --ok:          #34d399;
+      --err:         #f87171;
+      --warn:        #fbbf24;
+      --shadow:      0 1px 4px rgba(0,0,0,.4), 0 6px 24px rgba(0,0,0,.3);
+    }
+
+    /* ── Reset ───────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--text);
+      background: var(--bg);
+      overflow-x: hidden;
+      transition: background var(--transition), color var(--transition);
+    }
+    a { color: var(--a); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Ambient background ──────────────────────────────────────── */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(90px);
+      pointer-events: none;
+      z-index: 0;
+      animation: drift 22s ease-in-out infinite;
+    }
+    .orb-1 {
+      width: 640px; height: 640px;
+      background: var(--orb-a);
+      top: -200px; right: -160px;
+      animation-delay: -8s;
+    }
+    .orb-2 {
+      width: 520px; height: 520px;
+      background: var(--orb-b);
+      bottom: -160px; left: -120px;
+      animation-delay: -15s;
+      animation-duration: 28s;
+    }
+    @keyframes drift {
+      0%,100% { transform: translate(0,0) scale(1); }
+      33%      { transform: translate(40px,-30px) scale(1.06); }
+      66%      { transform: translate(-25px,20px) scale(.94); }
+    }
+    .grid-overlay {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        radial-gradient(circle, var(--border) 1px, transparent 1px);
+      background-size: 32px 32px;
+      opacity: .45;
+    }
+    [data-theme="dark"] .grid-overlay { opacity: .2; }
+
+    /* ── Header ──────────────────────────────────────────────────── */
+    .hdr {
+      position: fixed; top: 0; left: 0; right: 0; height: var(--hdr-h);
+      z-index: 100;
+      display: flex; align-items: center;
+      padding: 0 1.5rem;
+      background: color-mix(in srgb, var(--bg) 80%, transparent);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition);
+    }
+    .hdr-logo {
+      display: flex; align-items: baseline; gap: .5rem;
+      flex: 1;
+    }
+    .hdr-name {
+      font-size: 1.1rem; font-weight: 700;
+      background: var(--grad); -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent; background-clip: text;
+      letter-spacing: -.5px;
+    }
+    .hdr-tag {
+      font-size: .72rem; font-weight: 500; color: var(--text-muted);
+      letter-spacing: .04em; text-transform: uppercase;
+    }
+    .hdr-right { display: flex; align-items: center; gap: .75rem; }
+    .v-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .72rem; padding: .2rem .55rem;
+      border-radius: 99px; border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .theme-btn {
+      width: 36px; height: 36px; border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-card); color: var(--text);
+      cursor: pointer; font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color var(--transition), background var(--transition);
+    }
+    .theme-btn:hover { border-color: var(--a); }
+
+    /* ── Layout ──────────────────────────────────────────────────── */
+    .layout {
+      display: flex;
+      padding-top: var(--hdr-h);
+      min-height: 100vh;
+      position: relative; z-index: 1;
+    }
+
+    /* ── Sidebar nav ─────────────────────────────────────────────── */
+    .nav {
+      width: var(--nav-w);
+      flex-shrink: 0;
+      position: sticky;
+      top: var(--hdr-h);
+      height: calc(100vh - var(--hdr-h));
+      overflow-y: auto;
+      padding: 1.75rem 0 2rem;
+      border-right: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg) 85%, transparent);
+      backdrop-filter: blur(12px);
+    }
+    .nav::-webkit-scrollbar { width: 4px; }
+    .nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .nav-section { margin-bottom: 1.5rem; padding: 0 1rem; }
+    .nav-label {
+      font-size: .68rem; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text-muted);
+      padding: 0 .5rem; margin-bottom: .35rem;
+    }
+    .nav ul { list-style: none; }
+    .nav a {
+      display: block; padding: .3rem .5rem;
+      border-radius: 6px; font-size: .875rem;
+      color: var(--text-muted); transition: color var(--transition), background var(--transition);
+    }
+    .nav a:hover { color: var(--text); background: color-mix(in srgb, var(--a) 8%, transparent); text-decoration: none; }
+    .nav a.active {
+      color: var(--a); font-weight: 500;
+      background: color-mix(in srgb, var(--a) 10%, transparent);
+    }
+    .nav .sub { padding-left: .75rem; }
+    .nav .sub a { font-size: .82rem; }
+
+    /* ── Main content ────────────────────────────────────────────── */
+    .main {
+      flex: 1; min-width: 0;
+      padding: 3rem 3.5rem 6rem;
+      max-width: 860px;
+    }
+    section { margin-bottom: 4rem; }
+    h1 {
+      font-size: 3rem; font-weight: 700; line-height: 1.15;
+      letter-spacing: -.04em;
+      background: var(--grad); -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: .75rem;
+    }
+    h2 {
+      font-size: 1.4rem; font-weight: 700;
+      color: var(--text); margin-bottom: 1rem;
+      padding-bottom: .6rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 1rem; font-weight: 600;
+      color: var(--text); margin: 1.75rem 0 .6rem;
+    }
+    p { color: var(--text); margin-bottom: .9rem; }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Hero ────────────────────────────────────────────────────── */
+    .hero { padding: 2.5rem 0 1rem; }
+    .hero-sub {
+      font-size: 1.05rem; color: var(--text-muted);
+      margin-bottom: 1.5rem; max-width: 540px;
+    }
+    .provider-pills {
+      display: flex; flex-wrap: wrap; gap: .5rem;
+      margin-bottom: 2rem;
+    }
+    .pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .8rem; font-weight: 500;
+      padding: .3rem .8rem; border-radius: 99px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      background: var(--bg-card);
+      transition: border-color var(--transition);
+    }
+    .pill:hover { border-color: var(--a); }
+    .pill-accent {
+      background: color-mix(in srgb, var(--a) 12%, transparent);
+      border-color: color-mix(in srgb, var(--a) 40%, transparent);
+      color: var(--a);
+    }
+    .hero-cards {
+      display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem;
+      margin-top: 2.5rem;
+    }
+    .hero-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.1rem 1.2rem;
+      box-shadow: var(--shadow);
+      position: relative; overflow: hidden;
+    }
+    .hero-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: var(--grad);
+    }
+    .hero-card-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .9rem; font-weight: 500; color: var(--a);
+      margin-bottom: .3rem;
+    }
+    .hero-card-desc { font-size: .8rem; color: var(--text-muted); }
+
+    /* ── Terminal blocks ─────────────────────────────────────────── */
+    .term {
+      background: var(--bg-term); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      margin: 1.25rem 0; box-shadow: var(--shadow);
+      position: relative;
+    }
+    .term-bar {
+      background: color-mix(in srgb, var(--bg-term) 60%, #fff 8%);
+      padding: .6rem 1rem; display: flex; align-items: center; gap: .45rem;
+      border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    }
+    .dot {
+      width: 11px; height: 11px; border-radius: 50%;
+    }
+    .dot-r { background: #ff5f56; }
+    .dot-y { background: #ffbd2e; }
+    .dot-g { background: #27c93f; }
+    .term-label {
+      margin-left: auto; font-size: .7rem;
+      color: color-mix(in srgb, var(--text-muted) 50%, transparent);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .copy-btn {
+      margin-left: .5rem; background: none;
+      border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+      border-radius: 4px; padding: .1rem .45rem;
+      font-size: .68rem; color: var(--text-muted);
+      cursor: pointer; transition: border-color var(--transition), color var(--transition);
+    }
+    .copy-btn:hover { border-color: var(--a); color: var(--a); }
+    .term-body {
+      padding: 1rem 1.25rem; overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace; font-size: .82rem; line-height: 1.65;
+    }
+    .term-body code { background: none; padding: 0; font-size: inherit; color: #c8c8f0; }
+    [data-theme="light"] .term-body code { color: #c8c8f0; }
+    .cmd  { color: #a8f0c8; }
+    .flag { color: #f0c8a8; }
+    .cmt  { color: #6868a8; font-style: italic; }
+    .out  { color: #8888b8; }
+    .hl   { color: #f0f0ff; }
+
+    /* ── Inline code ─────────────────────────────────────────────── */
+    code {
+      font-family: 'JetBrains Mono', monospace; font-size: .82em;
+      background: var(--bg-code); border: 1px solid var(--border);
+      border-radius: 5px; padding: .1em .4em; color: var(--a);
+    }
+    pre { margin: 0; }
+    pre code { background: none; border: none; padding: 0; color: inherit; font-size: inherit; }
+
+    /* ── Tables ──────────────────────────────────────────────────── */
+    .tbl-wrap { overflow-x: auto; margin: 1rem 0; border-radius: var(--radius); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    th {
+      text-align: left; padding: .65rem 1rem;
+      font-size: .72rem; font-weight: 600; letter-spacing: .05em;
+      text-transform: uppercase; color: var(--text-muted);
+      background: color-mix(in srgb, var(--bg-code) 60%, transparent);
+      border-bottom: 1px solid var(--border);
+    }
+    td { padding: .65rem 1rem; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: color-mix(in srgb, var(--a) 4%, transparent); }
+    td code { font-size: .8em; }
+
+    /* ── Badges ──────────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center; gap: .3rem;
+      font-size: .72rem; font-weight: 600; letter-spacing: .03em;
+      padding: .2rem .6rem; border-radius: 99px;
+    }
+    .badge-ok  { background: color-mix(in srgb, var(--ok)  15%, transparent); color: var(--ok);  border: 1px solid color-mix(in srgb, var(--ok)  30%, transparent); }
+    .badge-err { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); border: 1px solid color-mix(in srgb, var(--err) 25%, transparent); }
+    .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    /* ── Cards ───────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.25rem 1.5rem;
+      box-shadow: var(--shadow); margin: 1rem 0;
+    }
+    .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 1rem; margin: 1rem 0; }
+
+    /* ── Provider cards ──────────────────────────────────────────── */
+    .prov-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .prov-head {
+      padding: .9rem 1.2rem; display: flex; align-items: center; gap: .75rem;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg-code) 40%, transparent);
+    }
+    .prov-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .92rem; font-weight: 600; color: var(--a); flex: 1;
+    }
+    .prov-rows { padding: .75rem 0; }
+    .prov-row {
+      display: flex; align-items: baseline; gap: .75rem;
+      padding: .3rem 1.2rem; font-size: .82rem;
+    }
+    .prov-key { color: var(--text-muted); min-width: 90px; flex-shrink: 0; }
+    .prov-val { font-family: 'JetBrains Mono', monospace; color: var(--text); word-break: break-all; }
+
+    /* ── Command reference ───────────────────────────────────────── */
+    .cmd-ref {
+      display: grid; gap: .6rem; margin: 1rem 0;
+    }
+    .cmd-row {
+      display: flex; align-items: baseline; gap: 1rem;
+      padding: .7rem 1rem; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--bg-card);
+      transition: border-color var(--transition);
+    }
+    .cmd-row:hover { border-color: color-mix(in srgb, var(--a) 40%, transparent); }
+    .cmd-sig {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem; color: var(--a); min-width: 220px; flex-shrink: 0;
+    }
+    .cmd-sig .arg { color: var(--b); }
+    .cmd-desc { font-size: .875rem; color: var(--text-muted); }
+
+    /* ── Callouts ────────────────────────────────────────────────── */
+    .callout {
+      border-radius: 8px; padding: .9rem 1.1rem;
+      font-size: .875rem; margin: 1.25rem 0;
+      display: flex; gap: .75rem; align-items: flex-start;
+    }
+    .callout-info  { background: color-mix(in srgb, var(--b) 8%,  transparent); border-left: 3px solid var(--b); }
+    .callout-warn  { background: color-mix(in srgb, var(--warn) 8%, transparent); border-left: 3px solid var(--warn); }
+    .callout-icon  { font-size: 1rem; flex-shrink: 0; margin-top: .1rem; }
+    .callout-body  { color: var(--text); }
+
+    /* ── Step list ───────────────────────────────────────────────── */
+    .steps { display: flex; flex-direction: column; gap: 1.25rem; margin: 1.25rem 0; }
+    .step  { display: flex; gap: 1rem; }
+    .step-num {
+      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+      background: var(--grad); color: #fff;
+      font-size: .75rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: .2rem;
+    }
+    .step-body h4 { font-size: .9rem; font-weight: 600; margin-bottom: .25rem; }
+    .step-body p  { font-size: .875rem; color: var(--text-muted); margin: 0; }
+
+    /* ── ps output card ──────────────────────────────────────────── */
+    .ps-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow);
+      margin: 1rem 0;
+    }
+    .ps-head {
+      padding: .75rem 1.2rem; border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--bg-code) 50%, transparent);
+      display: flex; align-items: center; gap: .75rem; font-size: .82rem;
+    }
+    .ps-running { display: flex; align-items: center; gap: .4rem; color: var(--ok); font-size: .78rem; font-weight: 600; }
+    .ps-pulse {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+    .ps-rows { padding: .5rem 0; }
+    .ps-row { display: flex; padding: .3rem 1.2rem; font-size: .82rem; }
+    .ps-k { color: var(--text-muted); min-width: 80px; }
+    .ps-v { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+    .ps-v a { font-family: inherit; font-size: inherit; }
+
+    /* ── Gradient divider ────────────────────────────────────────── */
+    .grad-line {
+      height: 1px; margin: 3.5rem 0;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
+    }
+
+    /* ── Ref tables ──────────────────────────────────────────────── */
+    .ref-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 1.25rem; margin-top: 1rem; }
+
+    /* ── Scrollbar ───────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 860px) {
+      .nav { display: none; }
+      .main { padding: 2rem 1.5rem 4rem; }
+      .hero-cards { grid-template-columns: 1fr; }
+      .ref-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      h1 { font-size: 2.2rem; }
+      .cmd-sig { min-width: unset; }
+      .cmd-row { flex-direction: column; gap: .25rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="orb orb-1" aria-hidden="true"></div>
+  <div class="orb orb-2" aria-hidden="true"></div>
+  <div class="grid-overlay" aria-hidden="true"></div>
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header class="hdr">
+    <div class="hdr-logo">
+      <span class="hdr-name">llm</span>
+      <span class="hdr-tag">provider wrapper</span>
+    </div>
+    <div class="hdr-right">
+      <span class="v-badge">v1.0.0</span>
+      <button class="theme-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- ── Sidebar ──────────────────────────────────────────────── -->
+    <nav class="nav" aria-label="Documentation navigation">
+      <div class="nav-section">
+        <div class="nav-label">Getting started</div>
+        <ul>
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#installation">Installation</a></li>
+          <ul class="sub">
+            <li><a href="#install-source">From source</a></li>
+            <li><a href="#install-app">Standalone app</a></li>
+            <li><a href="#install-providers">Providers</a></li>
+          </ul>
+        </ul>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Reference</div>
+        <ul>
+          <li><a href="#commands">Commands</a></li>
+          <li><a href="#usage">Usage</a></li>
+          <ul class="sub">
+            <li><a href="#cmd-ls">llm ls</a></li>
+            <li><a href="#cmd-provider-info">llm provider info</a></li>
+            <li><a href="#cmd-download">llm download</a></li>
+            <li><a href="#cmd-default">llm default</a></li>
+            <li><a href="#cmd-run">llm run</a></li>
+            <li><a href="#cmd-ps">llm ps</a></li>
+            <li><a href="#cmd-stop">llm stop</a></li>
+          </ul>
+          <li><a href="#examples">Examples</a></li>
+          <li><a href="#reference">Quick reference</a></li>
+        </ul>
+      </div>
+      <div class="nav-section">
+        <div class="nav-label">Distribution</div>
+        <ul>
+          <li><a href="#build">Build &amp; distribute</a></li>
+        </ul>
+      </div>
+    </nav>
+
+    <!-- ── Main ─────────────────────────────────────────────────── -->
+    <main class="main">
+
+      <!-- Overview -->
+      <section id="overview">
+        <div class="hero">
+          <h1>llm</h1>
+          <p class="hero-sub">
+            A unified CLI wrapper that gives <strong>ollama</strong>,
+            <strong>mlx-lm</strong>, and <strong>vllm-mlx</strong> a
+            consistent interface. One command to run, stop, download, and
+            inspect models across all three providers. Set a default once
+            and <code>llm run</code> always works without arguments.
+          </p>
+          <div class="provider-pills">
+            <span class="pill pill-accent">ollama</span>
+            <span class="pill pill-accent">mlx-lm</span>
+            <span class="pill pill-accent">vllm-mlx</span>
+            <span class="pill">Apple Silicon</span>
+            <span class="pill">OpenAI-compatible</span>
+          </div>
+
+          <div class="hero-cards">
+            <div class="hero-card">
+              <div class="hero-card-name">ollama</div>
+              <div class="hero-card-desc">Local model runtime with a built-in model registry. Interactive and API modes.</div>
+            </div>
+            <div class="hero-card">
+              <div class="hero-card-name">mlx-lm</div>
+              <div class="hero-card-desc">Apple Silicon–optimised inference via MLX. OpenAI-compatible server.</div>
+            </div>
+            <div class="hero-card">
+              <div class="hero-card-name">vllm-mlx</div>
+              <div class="hero-card-desc">High-throughput vLLM with MLX backend. OpenAI-compatible server.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout callout-info">
+          <span class="callout-icon">ℹ</span>
+          <div class="callout-body">
+            Only one model may run at a time. Session state is persisted
+            in <code>~/.llm/state.json</code> so <code>llm stop</code>
+            and <code>llm ps</code> always work without arguments.
+          </div>
+        </div>
+      </section>
+
+      <div class="grad-line"></div>
+
+      <!-- Installation -->
+      <section id="installation">
+        <h2>Installation</h2>
+
+        <h3 id="install-source">From source</h3>
+        <p>
+          Requires <strong>Python 3.9 or newer</strong>. No other
+          dependencies — <code>llm.py</code> uses only the standard
+          library.
+        </p>
+        <div class="term">
+          <div class="term-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+            <span class="term-label">shell</span>
+            <button class="copy-btn" data-copy="git clone &lt;repo&gt;&#10;cd llm&#10;python3 llm.py --help">Copy</button>
+          </div>
+          <div class="term-body"><code>
+<span class="cmd">git clone</span> <span class="flag">&lt;repo&gt;</span>
+<span class="cmd">cd</span> llm
+<span class="cmd">python3</span> llm.py --help
+          </code></div>
+        </div>
+        <div class="callout callout-info">
+          <span class="callout-icon">ℹ</span>
+          <div class="callout-body">
+            <a href="https://pixi.sh" target="_blank">Pixi</a> is also
+            supported for a managed environment and is required for
+            <code>pixi run build</code>. Run <code>pixi install</code>
+            then use <code>python3 llm.py</code> as above.
+          </div>
+        </div>
+
+        <h3 id="install-app">Standalone app <span class="pill" style="vertical-align:middle;font-size:.7rem">Apple Silicon only</span></h3>
+        <p>
+          Build a completely self-contained <code>.app</code> bundle and
+          <code>.dmg</code> installer — no Python or Pixi required to run
+          the result.
+        </p>
+        <div class="term">
+          <div class="term-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+            <span class="term-label">shell</span>
+            <button class="copy-btn" data-copy="pixi run build">Copy</button>
+          </div>
+          <div class="term-body"><code>
+<span class="cmt"># produces dist/llm.app and dist/llm.dmg</span>
+<span class="cmd">pixi run build</span>
+          </code></div>
+        </div>
+
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <h4>Install from the DMG</h4>
+              <p>Open <code>dist/llm.dmg</code> and drag <code>llm.app</code> to <strong>Applications</strong>.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <h4>Add to your shell</h4>
+              <p>Append to <code>~/.zshrc</code> or <code>~/.bashrc</code>, then reload.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <h4>Confirm</h4>
+              <p>Run <code>llm --help</code> in a new terminal window.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="term">
+          <div class="term-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+          </div>
+          <div class="term-body"><code>
+<span class="cmt"># Add to ~/.zshrc</span>
+<span class="cmd">export</span> <span class="hl">PATH</span>=<span class="flag">"/Applications/llm.app/Contents/MacOS:$PATH"</span>
+
+<span class="cmt"># Reload and verify</span>
+<span class="cmd">source</span> ~/.zshrc
+<span class="cmd">llm</span> --help
+          </code></div>
+        </div>
+
+        <h3 id="install-providers">Provider dependencies</h3>
+        <p>Install whichever providers you need separately. <code>llm provider info</code> shows which are currently detected.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>Provider</th><th>Install</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>ollama</code></td>
+                <td><a href="https://ollama.com" target="_blank">ollama.com</a></td>
+                <td>Interactive and API server modes</td>
+              </tr>
+              <tr>
+                <td><code>mlx-lm</code></td>
+                <td><code>pip install mlx-lm</code></td>
+                <td>Apple Silicon only, OpenAI-compatible</td>
+              </tr>
+              <tr>
+                <td><code>vllm-mlx</code></td>
+                <td><code>pip install vllm</code></td>
+                <td>Apple Silicon only, OpenAI-compatible</td>
+              </tr>
+              <tr>
+                <td>HuggingFace CLI</td>
+                <td><code>pip install huggingface-hub</code></td>
+                <td>Required for <code>llm download</code> with mlx-lm / vllm-mlx</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <div class="grad-line"></div>
+
+      <!-- Commands -->
+      <section id="commands">
+        <h2>Commands</h2>
+        <div class="cmd-ref">
+          <div class="cmd-row">
+            <span class="cmd-sig">llm ls</span>
+            <span class="cmd-desc">List all locally downloaded models from all providers.</span>
+          </div>
+          <div class="cmd-row">
+            <span class="cmd-sig">llm ps</span>
+            <span class="cmd-desc">Show the currently running model, port, base URL, and PID.</span>
+          </div>
+          <div class="cmd-row">
+            <span class="cmd-sig">llm run <span class="arg">[provider model]</span></span>
+            <span class="cmd-desc">Start a model. Uses the configured default when called bare.</span>
+          </div>
+          <div class="cmd-row">
+            <span class="cmd-sig">llm stop</span>
+            <span class="cmd-desc">Stop the running model. No arguments needed.</span>
+          </div>
+          <div class="cmd-row">
+            <span class="cmd-sig">llm default <span class="arg">[provider model]</span></span>
+            <span class="cmd-desc">Show the current default, or set a new one.</span>
+          </div>
+          <div class="cmd-row">
+            <span class="cmd-sig">llm download <span class="arg">&lt;provider&gt; &lt;model&gt;</span></span>
+            <span class="cmd-desc">Download a model via ollama pull or huggingface-cli.</span>
+          </div>
+          <div class="cmd-row">
+            <span class="cmd-sig">llm provider info</span>
+            <span class="cmd-desc">Show executables, ports, base URLs, and install status per provider.</span>
+          </div>
+        </div>
+
+        <p style="font-size:.875rem;color:var(--text-muted);margin-top:1rem">
+          Run <code>llm --help</code> or <code>llm &lt;command&gt; --help</code> for full option details.
+        </p>
+      </section>
+
+      <div class="grad-line"></div>
+
+      <!-- Usage -->
+      <section id="usage">
+        <h2>Usage</h2>
+
+        <!-- ls -->
+        <section id="cmd-ls">
+          <h3>llm ls</h3>
+          <p>
+            Scans <strong>ollama</strong> via <code>ollama ls</code> and the
+            HuggingFace cache at <code>~/.cache/huggingface/hub</code>, then
+            prints a combined table labelled by provider.
+          </p>
+          <div class="term">
+            <div class="term-bar">
+              <span class="dot dot-r"></span>
+              <span class="dot dot-y"></span>
+              <span class="dot dot-g"></span>
+              <span class="term-label">llm ls</span>
+            </div>
+            <div class="term-body"><code>
+<span class="out">PROVIDER            MODEL</span>
+<span class="out">------------------  ----------------------------------------</span>
+<span class="hl">ollama</span>              <span class="flag">gemma4:26b</span>
+<span class="hl">ollama</span>              <span class="flag">gemma4:31b</span>
+<span class="hl">ollama</span>              <span class="flag">qwen3.5:35b</span>
+<span class="hl">mlx-lm / vllm-mlx</span>  <span class="flag">mlx-community/Qwen3.6-35B-A3B-nvfp4</span>
+<span class="hl">mlx-lm / vllm-mlx</span>  <span class="flag">Qwen/Qwen3.6-27B</span>
+<span class="hl">mlx-lm / vllm-mlx</span>  <span class="flag">google/gemma-4-E4B</span>
+            </code></div>
+          </div>
+          <div class="callout callout-info">
+            <span class="callout-icon">ℹ</span>
+            <div class="callout-body">
+              HuggingFace models appear under <strong>mlx-lm / vllm-mlx</strong>
+              because either provider can load them. Use
+              <code>llm provider info</code> to see which is actually installed.
+            </div>
+          </div>
+        </section>
+
+        <!-- provider info -->
+        <section id="cmd-provider-info">
+          <h3>llm provider info</h3>
+          <p>
+            Displays the executable path, default port, OpenAI-compatible base
+            URL, model storage directory, and install status for every provider.
+          </p>
+          <div class="card-grid">
+            <div class="prov-card">
+              <div class="prov-head">
+                <span class="prov-name">ollama</span>
+                <span class="badge badge-ok"><span class="badge-dot"></span>installed</span>
+              </div>
+              <div class="prov-rows">
+                <div class="prov-row"><span class="prov-key">Executable</span><span class="prov-val">/usr/local/bin/ollama</span></div>
+                <div class="prov-row"><span class="prov-key">Default port</span><span class="prov-val">11434</span></div>
+                <div class="prov-row"><span class="prov-key">Base URL</span><span class="prov-val">http://127.0.0.1:11434</span></div>
+                <div class="prov-row"><span class="prov-key">Model dir</span><span class="prov-val">~/.ollama/models</span></div>
+              </div>
+            </div>
+            <div class="prov-card">
+              <div class="prov-head">
+                <span class="prov-name">mlx-lm</span>
+                <span class="badge badge-err"><span class="badge-dot"></span>not installed</span>
+              </div>
+              <div class="prov-rows">
+                <div class="prov-row"><span class="prov-key">Executable</span><span class="prov-val">python3 -m mlx_lm.server</span></div>
+                <div class="prov-row"><span class="prov-key">Default port</span><span class="prov-val">8080</span></div>
+                <div class="prov-row"><span class="prov-key">Base URL</span><span class="prov-val">http://127.0.0.1:8080/v1</span></div>
+                <div class="prov-row"><span class="prov-key">Model dir</span><span class="prov-val">~/.cache/huggingface/hub</span></div>
+              </div>
+            </div>
+            <div class="prov-card">
+              <div class="prov-head">
+                <span class="prov-name">vllm-mlx</span>
+                <span class="badge badge-err"><span class="badge-dot"></span>not installed</span>
+              </div>
+              <div class="prov-rows">
+                <div class="prov-row"><span class="prov-key">Executable</span><span class="prov-val">vllm serve</span></div>
+                <div class="prov-row"><span class="prov-key">Default port</span><span class="prov-val">8080</span></div>
+                <div class="prov-row"><span class="prov-key">Base URL</span><span class="prov-val">http://127.0.0.1:8080/v1</span></div>
+                <div class="prov-row"><span class="prov-key">Model dir</span><span class="prov-val">~/.cache/huggingface/hub</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- download -->
+        <section id="cmd-download">
+          <h3>llm download</h3>
+          <p>
+            Downloads a model using the appropriate tool for each provider.
+            Requires <a href="https://ollama.com" target="_blank">ollama</a>
+            or the
+            <a href="https://huggingface.co/docs/huggingface_hub/guides/cli" target="_blank">HuggingFace CLI</a>
+            to be installed.
+          </p>
+          <div class="term">
+            <div class="term-bar">
+              <span class="dot dot-r"></span>
+              <span class="dot dot-y"></span>
+              <span class="dot dot-g"></span>
+            </div>
+            <div class="term-body"><code>
+<span class="cmt"># ollama — uses: ollama pull</span>
+<span class="cmd">llm download</span> ollama llama3.2
+
+<span class="cmt"># mlx-lm — uses: huggingface-cli download</span>
+<span class="cmd">llm download</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
+
+<span class="cmt"># vllm-mlx — same HuggingFace download</span>
+<span class="cmd">llm download</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit
+            </code></div>
+          </div>
+        </section>
+
+        <!-- default -->
+        <section id="cmd-default">
+          <h3>llm default</h3>
+          <p>
+            Sets the provider and model that bare <code>llm run</code> will
+            use. Configuration is saved to <code>~/.llm/config.json</code>.
+          </p>
+          <div class="term">
+            <div class="term-bar">
+              <span class="dot dot-r"></span>
+              <span class="dot dot-y"></span>
+              <span class="dot dot-g"></span>
+            </div>
+            <div class="term-body"><code>
+<span class="cmt"># Set a default</span>
+<span class="cmd">llm default</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
+
+<span class="cmt"># Show the current default</span>
+<span class="cmd">llm default</span>
+<span class="out">Default provider: mlx-lm</span>
+<span class="out">Default model:    mlx-community/Llama-3.2-3B-Instruct-4bit</span>
+            </code></div>
+          </div>
+        </section>
+
+        <!-- run -->
+        <section id="cmd-run">
+          <h3>llm run</h3>
+          <p>
+            Starts a model server or interactive session. Only one model may
+            run at a time — attempting to start a second will error with a
+            reminder to <code>llm stop</code> first.
+          </p>
+          <p>
+            Any flag not recognised by <code>llm</code> is forwarded directly
+            to the provider binary, so all provider-specific options work
+            transparently.
+          </p>
+
+          <div class="tbl-wrap" style="margin:1rem 0">
+            <table>
+              <thead><tr><th>Provider</th><th>Behaviour</th><th>Default port</th></tr></thead>
+              <tbody>
+                <tr><td><code>ollama</code></td><td>Starts an interactive session (<code>ollama run</code>)</td><td>11434</td></tr>
+                <tr><td><code>mlx-lm</code></td><td>Starts an OpenAI-compatible API server</td><td>8080</td></tr>
+                <tr><td><code>vllm-mlx</code></td><td>Starts an OpenAI-compatible API server</td><td>8080</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="term">
+            <div class="term-bar">
+              <span class="dot dot-r"></span>
+              <span class="dot dot-y"></span>
+              <span class="dot dot-g"></span>
+            </div>
+            <div class="term-body"><code>
+<span class="cmt"># Run the configured default</span>
+<span class="cmd">llm run</span>
+
+<span class="cmt"># Run a specific provider + model</span>
+<span class="cmd">llm run</span> ollama llama3.2
+<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
+
+<span class="cmt"># Override host and port</span>
+<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit <span class="flag">--host</span> 0.0.0.0 <span class="flag">--port</span> 8081
+
+<span class="cmt"># Provider-specific flags are forwarded automatically</span>
+<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \
+    <span class="flag">--port</span> 8080 <span class="flag">--chat-template</span> chatml <span class="flag">--max-tokens</span> 2048
+
+<span class="cmd">llm run</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \
+    <span class="flag">--port</span> 8080 <span class="flag">--max-model-len</span> 4096 <span class="flag">--dtype</span> float16
+            </code></div>
+          </div>
+        </section>
+
+        <!-- ps -->
+        <section id="cmd-ps">
+          <h3>llm ps</h3>
+          <p>
+            Reads <code>~/.llm/state.json</code> and displays the currently
+            running model. Also shows whether the saved PID is still alive.
+          </p>
+          <div class="ps-card">
+            <div class="ps-head">
+              <code style="background:none;border:none;padding:0;font-size:.82rem;color:var(--text-muted)">llm ps</code>
+              <span class="ps-running"><span class="ps-pulse"></span>running</span>
+            </div>
+            <div class="ps-rows">
+              <div class="ps-row"><span class="ps-k">Provider</span><span class="ps-v">mlx-lm</span></div>
+              <div class="ps-row"><span class="ps-k">Model</span><span class="ps-v">mlx-community/Llama-3.2-3B-Instruct-4bit</span></div>
+              <div class="ps-row"><span class="ps-k">Host</span><span class="ps-v">127.0.0.1</span></div>
+              <div class="ps-row"><span class="ps-k">Port</span><span class="ps-v">8080</span></div>
+              <div class="ps-row"><span class="ps-k">Base URL</span><span class="ps-v"><a href="#">http://127.0.0.1:8080/v1</a></span></div>
+              <div class="ps-row"><span class="ps-k">PID</span><span class="ps-v">42107</span></div>
+              <div class="ps-row"><span class="ps-k">Started</span><span class="ps-v">2026-04-25T12:00:00</span></div>
+              <div class="ps-row"><span class="ps-k">Status</span><span class="ps-v" style="color:var(--ok)">running</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- stop -->
+        <section id="cmd-stop">
+          <h3>llm stop</h3>
+          <p>
+            Reads the state file, sends <code>SIGTERM</code> to the saved PID,
+            and clears the state. For <strong>ollama</strong>, also calls
+            <code>ollama stop &lt;model&gt;</code> to release GPU memory.
+            No arguments are required.
+          </p>
+          <div class="term">
+            <div class="term-bar">
+              <span class="dot dot-r"></span>
+              <span class="dot dot-y"></span>
+              <span class="dot dot-g"></span>
+            </div>
+            <div class="term-body"><code>
+<span class="cmd">llm stop</span>
+<span class="out">Sent SIGTERM to PID 42107.</span>
+<span class="out">Stopped mlx-lm: mlx-community/Llama-3.2-3B-Instruct-4bit</span>
+            </code></div>
+          </div>
+        </section>
+      </section>
+
+      <div class="grad-line"></div>
+
+      <!-- Examples -->
+      <section id="examples">
+        <h2>Examples</h2>
+
+        <h3>First-time setup</h3>
+        <div class="term">
+          <div class="term-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+            <span class="term-label">full workflow</span>
+          </div>
+          <div class="term-body"><code>
+<span class="cmt"># 1. Check what's installed and what you already have</span>
+<span class="cmd">llm provider info</span>
+<span class="cmd">llm ls</span>
+
+<span class="cmt"># 2. Download a model</span>
+<span class="cmd">llm download</span> ollama llama3.2
+<span class="cmd">llm download</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
+
+<span class="cmt"># 3. Set a default so bare 'llm run' always works</span>
+<span class="cmd">llm default</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
+<span class="cmd">llm default</span>   <span class="cmt"># confirm</span>
+
+<span class="cmt"># 4. Run it</span>
+<span class="cmd">llm run</span>
+
+<span class="cmt"># 5. Check what's running (in another terminal)</span>
+<span class="cmd">llm ps</span>
+
+<span class="cmt"># 6. Stop it</span>
+<span class="cmd">llm stop</span>
+          </code></div>
+        </div>
+
+        <h3>mlx-lm with custom flags</h3>
+        <div class="term">
+          <div class="term-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+          </div>
+          <div class="term-body"><code>
+<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \
+    <span class="flag">--host</span> 0.0.0.0 \
+    <span class="flag">--port</span> 8080 \
+    <span class="flag">--chat-template</span> chatml \
+    <span class="flag">--max-tokens</span> 2048
+          </code></div>
+        </div>
+
+        <h3>vllm-mlx with custom flags</h3>
+        <div class="term">
+          <div class="term-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+          </div>
+          <div class="term-body"><code>
+<span class="cmd">llm run</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \
+    <span class="flag">--host</span> 0.0.0.0 \
+    <span class="flag">--port</span> 8080 \
+    <span class="flag">--max-model-len</span> 4096 \
+    <span class="flag">--dtype</span> float16
+          </code></div>
+        </div>
+
+        <h3>ollama on a custom port</h3>
+        <div class="term">
+          <div class="term-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+          </div>
+          <div class="term-body"><code>
+<span class="cmd">llm run</span> ollama llama3.2 <span class="flag">--host</span> 0.0.0.0 <span class="flag">--port</span> 11434
+          </code></div>
+        </div>
+      </section>
+
+      <div class="grad-line"></div>
+
+      <!-- Reference -->
+      <section id="reference">
+        <h2>Quick reference</h2>
+        <div class="ref-grid">
+          <div class="card">
+            <h3 style="margin-top:0;font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Default ports &amp; base URLs</h3>
+            <div class="prov-rows">
+              <div class="prov-row" style="padding-left:0">
+                <span class="prov-key" style="min-width:80px">ollama</span>
+                <span class="prov-val">:11434 → <code style="color:var(--b);background:none;border:none;padding:0">http://127.0.0.1:11434</code></span>
+              </div>
+              <div class="prov-row" style="padding-left:0">
+                <span class="prov-key" style="min-width:80px">mlx-lm</span>
+                <span class="prov-val">:8080 → <code style="color:var(--b);background:none;border:none;padding:0">http://127.0.0.1:8080/v1</code></span>
+              </div>
+              <div class="prov-row" style="padding-left:0">
+                <span class="prov-key" style="min-width:80px">vllm-mlx</span>
+                <span class="prov-val">:8080 → <code style="color:var(--b);background:none;border:none;padding:0">http://127.0.0.1:8080/v1</code></span>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="margin-top:0;font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Model storage</h3>
+            <div class="prov-rows">
+              <div class="prov-row" style="padding-left:0">
+                <span class="prov-key" style="min-width:80px">ollama</span>
+                <span class="prov-val"><code style="background:none;border:none;padding:0;color:var(--text)">~/.ollama/models</code></span>
+              </div>
+              <div class="prov-row" style="padding-left:0">
+                <span class="prov-key" style="min-width:80px">mlx-lm</span>
+                <span class="prov-val"><code style="background:none;border:none;padding:0;color:var(--text)">~/.cache/huggingface/hub</code></span>
+              </div>
+              <div class="prov-row" style="padding-left:0">
+                <span class="prov-key" style="min-width:80px">vllm-mlx</span>
+                <span class="prov-val"><code style="background:none;border:none;padding:0;color:var(--text)">~/.cache/huggingface/hub</code></span>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3 style="margin-top:0;font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Runtime files</h3>
+            <div class="prov-rows">
+              <div class="prov-row" style="padding-left:0;flex-direction:column;gap:.15rem">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--a)">~/.llm/state.json</span>
+                <span style="font-size:.8rem;color:var(--text-muted)">Active session — provider, model, PID, port</span>
+              </div>
+              <div class="prov-row" style="padding-left:0;flex-direction:column;gap:.15rem;margin-top:.5rem">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--a)">~/.llm/config.json</span>
+                <span style="font-size:.8rem;color:var(--text-muted)">Saved default provider and model</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="grad-line"></div>
+
+      <!-- Build -->
+      <section id="build">
+        <h2>Build &amp; distribute</h2>
+        <p>
+          <code>pixi run build</code> invokes <strong>PyInstaller</strong> with
+          <code>llm.spec</code> to produce a self-contained
+          <strong>Apple Silicon</strong> <code>.app</code> bundle, then wraps it
+          in a distributable <code>.dmg</code> using macOS's built-in
+          <code>hdiutil</code>.
+        </p>
+
+        <div class="callout callout-warn">
+          <span class="callout-icon">⚠</span>
+          <div class="callout-body">
+            The build task only runs on <strong>osx-arm64</strong>. Running it
+            on Linux, Windows, or Intel Macs will exit with an error.
+          </div>
+        </div>
+
+        <h3>What it produces</h3>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Artifact</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>dist/llm.app</code></td>
+                <td>Self-contained macOS app bundle. No Python or Pixi required to run.</td>
+              </tr>
+              <tr>
+                <td><code>dist/llm.dmg</code></td>
+                <td>Distributable disk image. Drag <code>llm.app</code> to Applications.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>How the binary works</h3>
+        <p>
+          PyInstaller bundles a Python interpreter alongside the
+          <code>llm.py</code> wrapper. When running as a frozen binary,
+          <code>llm</code> detects the <code>sys.frozen</code> flag and
+          resolves <code>python3</code> from <code>PATH</code> for
+          <code>mlx-lm</code> invocations — ensuring <code>mlx_lm</code>
+          is loaded from the user's own environment, not the bundled one.
+        </p>
+
+        <div class="term">
+          <div class="term-bar">
+            <span class="dot dot-r"></span>
+            <span class="dot dot-y"></span>
+            <span class="dot dot-g"></span>
+            <span class="term-label">build output</span>
+          </div>
+          <div class="term-body"><code>
+<span class="cmd">pixi run build</span>
+<span class="out">--- PyInstaller build ---</span>
+<span class="out">...</span>
+<span class="out">--- Creating DMG ---</span>
+<span class="out">...</span>
+<span class="hl">Build complete.</span>
+<span class="out">  App bundle  dist/llm.app</span>
+<span class="out">  DMG         dist/llm.dmg</span>
+
+<span class="out">To use from Terminal without installing:</span>
+<span class="flag">  dist/llm.app/Contents/MacOS/llm --help</span>
+
+<span class="out">To install system-wide (add to ~/.zshrc or ~/.bashrc):</span>
+<span class="flag">  export PATH="dist/llm.app/Contents/MacOS:$PATH"</span>
+          </code></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // ── Theme ──────────────────────────────────────────────────────
+    const html = document.documentElement;
+    const btn  = document.getElementById('theme-btn');
+    const saved = localStorage.getItem('llm-theme') || 'dark';
+    html.dataset.theme = saved;
+    setIcon(saved);
+
+    btn.addEventListener('click', () => {
+      const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+      html.dataset.theme = next;
+      localStorage.setItem('llm-theme', next);
+      setIcon(next);
+    });
+
+    function setIcon(theme) {
+      btn.textContent = theme === 'dark' ? '☀' : '🌙';
+      btn.setAttribute('aria-label', `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`);
+    }
+
+    // ── Scroll spy ─────────────────────────────────────────────────
+    const sections = document.querySelectorAll('section[id]');
+    const links    = document.querySelectorAll('.nav a[href^="#"]');
+
+    const spy = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        links.forEach(l => l.classList.remove('active'));
+        const hit = document.querySelector(`.nav a[href="#${e.target.id}"]`);
+        if (hit) hit.classList.add('active');
+      });
+    }, { rootMargin: '-15% 0px -70% 0px' });
+
+    sections.forEach(s => spy.observe(s));
+
+    // ── Copy buttons ───────────────────────────────────────────────
+    document.querySelectorAll('.copy-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        const raw = b.dataset.copy
+          || b.closest('.term').querySelector('.term-body code').innerText;
+        const clean = raw.replace(/^\$ /gm, '').trim();
+        navigator.clipboard.writeText(clean).then(() => {
+          const orig = b.textContent;
+          b.textContent = 'Copied!';
+          setTimeout(() => { b.textContent = orig; }, 1800);
+        });
+      });
+    });
+  </script>
+</body>
+</html>

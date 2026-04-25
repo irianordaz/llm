@@ -45,54 +45,52 @@ STATE_FILE = LLM_DIR / 'state.json'
 CONFIG_FILE = LLM_DIR / 'config.json'
 
 HELP_EPILOG = """
+Workflow:
+
+  1. Check what is installed and what models you have:
+       llm provider info
+       llm ls
+
+  2. Download a model if needed:
+       llm download ollama llama3.2
+       llm download mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
+
+  3. Set a default so bare 'llm run' always works:
+       llm default mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
+       llm default                    # confirm
+
+  4. Run and monitor:
+       llm run                        # uses configured default
+       llm ps                         # show provider, port, base URL
+       llm stop                       # no arguments needed
+
 Examples:
 
-  List all local models from every provider:
-    llm ls
-
-  Set a default provider and model:
-    llm default mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
-
-  Show the current default:
-    llm default
-
-  Run the default model:
-    llm run
-
-  Run a specific model:
+  Run a specific provider and model:
     llm run ollama llama3.2
     llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
-    llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit --port 8081
+    llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \\
+        --host 0.0.0.0 --port 8081
 
-  Pass provider-specific flags after standard options:
+  Forward provider-specific flags after the standard options:
     llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \\
         --port 8080 --chat-template chatml --max-tokens 2048
     llm run vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \\
         --port 8080 --max-model-len 4096 --dtype float16
 
-  See what is currently running:
-    llm ps
-
-  Stop the running model (no arguments needed):
-    llm stop
-
-  Download a model:
-    llm download ollama llama3.2
-    llm download mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
-    llm download vllm-mlx mlx-community/Mistral-7B-v0.1-4bit
-
-  Show provider details (executable, port, base URL, model dir):
-    llm provider info
-
 Default ports:
-  ollama    11434
-  mlx-lm    8080
-  vllm-mlx  8080
+  ollama    11434      base URL: http://127.0.0.1:11434
+  mlx-lm    8080       base URL: http://127.0.0.1:8080/v1
+  vllm-mlx  8080       base URL: http://127.0.0.1:8080/v1
 
 Model locations:
   ollama    ~/.ollama/models
   mlx-lm    ~/.cache/huggingface/hub
   vllm-mlx  ~/.cache/huggingface/hub
+
+Runtime files:
+  ~/.llm/state.json   active session  (provider, model, pid, port)
+  ~/.llm/config.json  saved default   (provider, model)
 """
 
 
@@ -296,6 +294,20 @@ def _resolve_provider_model(
     return default_provider, default_model
 
 
+def _python_executable() -> str:
+    if getattr(sys, 'frozen', False):
+        python3 = shutil.which('python3')
+        if not python3:
+            print(
+                'Error: python3 not found on PATH.\n'
+                'Install Python 3 to use mlx-lm or vllm-mlx.',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return python3
+    return sys.executable
+
+
 def _build_run_cmd(
     provider: str,
     model: str,
@@ -307,7 +319,7 @@ def _build_run_cmd(
         return ['ollama', 'run', model] + passthrough
     if provider == 'mlx-lm':
         return [
-            sys.executable, '-m', 'mlx_lm.server',
+            _python_executable(), '-m', 'mlx_lm.server',
             '--model', model,
             '--host', host,
             '--port', str(port),
@@ -550,7 +562,12 @@ def _add_network_args(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog='llm',
-        description='Unified wrapper for ollama, mlx-lm, and vllm-mlx.',
+        description=(
+            'Unified wrapper for ollama, mlx-lm, and vllm-mlx.\n'
+            'Run any model with a consistent interface across all\n'
+            'three providers. Only one model runs at a time;\n'
+            'session state is persisted in ~/.llm/state.json.'
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=HELP_EPILOG,
     )

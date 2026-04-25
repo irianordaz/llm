@@ -7,10 +7,9 @@ platforms = ["linux-64", "osx-arm64", "win-64"]
 
 [dependencies]
 python = ">=3.11"
-ruff = ">=0.4"
 
-[tasks]
-run = "python llm.py"
-lint = "ruff check ."
-fmt = "ruff format ."
-check = "ruff check . && ruff format --check ."
+[target.osx-arm64.pypi-dependencies]
+pyinstaller = ">=6.0"
+
+[target.osx-arm64.tasks]
+build = "python build.py"
