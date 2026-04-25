@@ -11,3 +11,5 @@ Allow creation of a standalone application using pyinstaller and add a pixi task
 Create a pyproject.toml using the guidelines in .rules.md and enforce ruff formatting. Add pixi tasks for ruff format and check. Reformat the code blocks in docs/index.html to not show the borders of cells and remove the empty lines.
 
 Allow the user to specify the paths for the provider executables. The path default for mlx-lm is /opt/homebrew/bin/mlx-lm since it is installed with homebrew. The command mlx-lm has options to serve models and manage. The path to vllm-mlx is /Users/iordaz/local/vllm-mlx but must be executed with pixi (example: pixi run vllm-mlx serve sabeshbesh/qwen3.6-27b-mlx-4bit --port 8080), use the pixi.toml and pixi.lock files in the directories for the provider. If a provider path includes a pixi environment use pixi instead of system python3.
+
+Allow providing the provider path for ollama as well. Updat the build with pyinstaller to build and create the standalone app and .dmg for llm_gui.py instead of llm.py. Update the pixi task build and update docs.

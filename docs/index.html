@@ -7,7 +7,7 @@
             name="description"
             content="llm — unified CLI wrapper for ollama, mlx-lm, and vllm-mlx"
         />
-        <title>llm · LLM Provider Wrapper</title>
+        <title>LLM Dashboard · Model Manager</title>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
@@ -862,8 +862,8 @@
         <!-- ── Header ─────────────────────────────────────────────────── -->
         <header class="hdr">
             <div class="hdr-logo">
-                <span class="hdr-name">llm</span>
-                <span class="hdr-tag">provider wrapper</span>
+          <span class="hdr-name">LLM Dashboard</span>
+                  <span class="hdr-tag">model manager</span>
             </div>
             <div class="hdr-right">
                 <span class="v-badge">v1.0.0</span>
@@ -935,8 +935,8 @@
                     <div class="hero">
                         <h1>llm</h1>
                         <p class="hero-sub">
-                            A unified CLI wrapper that gives
-                            <strong>ollama</strong>, <strong>mlx-lm</strong>,
+A unified CLI and GUI wrapper that gives
+                              <strong>ollama</strong>, <strong>mlx-lm</strong>,
                             and <strong>vllm-mlx</strong> a consistent
                             interface. One command to run, stop, download, and
                             inspect models across all three providers. Set a
@@ -1412,7 +1412,9 @@
                         </p>
                         <div class="term">
                             <button class="copy-btn">Copy</button>
-                            <div class="term-body"><code><span class="cmt"># Set the mlx-lm executable (default: /opt/homebrew/bin/mlx_lm)</span>
+                            <div class="term-body"><code>                                  <span class="cmt"># Set the ollama executable (default: /usr/local/bin/ollama)</span>
+<span class="cmd">llm provider set</span> ollama /opt/homebrew/bin/ollama
+<span class="cmt"># Set the mlx-lm executable (default: /opt/homebrew/bin/mlx_lm)</span>
 <span class="cmd">llm provider set</span> mlx-lm /opt/homebrew/bin/mlx_lm
 <span class="cmt"># Point vllm-mlx at a pixi environment directory</span>
 <span class="cmd">llm provider set</span> vllm-mlx /path/to/vllm-mlx</code></div>
@@ -2007,14 +2009,14 @@
                 <!-- Build -->
                 <section id="build">
                     <h2>Build &amp; distribute</h2>
-                    <p>
-                        <code>pixi run build</code> invokes
-                        <strong>PyInstaller</strong> with
-                        <code>llm.spec</code> to produce a self-contained
-                        <code>.app</code> bundle, then wraps it in a
-                        distributable <code>.dmg</code> using macOS's built-in
-                        <code>hdiutil</code>.
-                    </p>
+                      <p>
+                          <code>pixi run build</code> invokes
+                          <strong>PyInstaller</strong> with
+                          <code>llm.spec</code> to produce a self-contained
+                          GUI <code>.app</code> bundle from <code>llm_gui.py</code>,
+                           then wraps it in a distributable <code>.dmg</code>
+                           using macOS's built-in <code>hdiutil</code>.
+                      </p>
 
                     <div class="callout callout-warn">
                         <span class="callout-icon">⚠</span>
@@ -2058,18 +2060,18 @@
                         </table>
                     </div>
 
-                    <h3>How the binary works</h3>
-                    <p>
-                        PyInstaller bundles a Python interpreter alongside the
-                        <code>llm.py</code> wrapper. When running as a frozen
-                        binary, <code>llm</code> detects the
-                        <code>sys.frozen</code> flag and resolves
-                        <code>python3</code> from <code>PATH</code> for
-                        <code>mlx-lm</code> invocations — ensuring
-                        <code>mlx_lm</code>
+                       <h3>How the binary works</h3>
+                       <p>
+                         PyInstaller bundles a Python interpreter alongside the
+                          <code>llm_gui.py</code> wrapper and wxPython. When
+                          running as a frozen binary, <code>llm</code> detects
+                           the <code>sys.frozen</code> flag and resolves
+                          <code>python3</code> from <code>PATH</code> for
+                          <code>mlx-lm</code> invocations — ensuring
+                          <code>mlx_lm</code>
                         is loaded from the user's own environment, not the
                         bundled one.
-                    </p>
+                       </p>
 
                     <div class="term">
                         <button class="copy-btn">Copy</button>

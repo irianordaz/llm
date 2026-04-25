@@ -12,7 +12,7 @@ wxpython = ">=4.2"
 
 [tasks]
 llm = "python llm.py"
-gui = "python llm_gui.py"
+gui = "python llm_dashboard.py"
 lint = "ruff check ."
 fmt = "ruff format ."
 check = { cmd = "ruff format --check .", depends-on = ["lint"] }

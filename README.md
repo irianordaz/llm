@@ -1,10 +1,10 @@
 # llm
 
-A unified CLI wrapper for **ollama**, **mlx-lm**, and **vllm-mlx**.
+A unified CLI and GUI wrapper for **ollama**, **mlx-lm**, and **vllm-mlx**.
 One command to run, stop, download, and inspect models across all
 three providers. Set a default once and `llm run` always works without
 arguments. Only one model runs at a time; state is persisted in
-`~/.llm/`.
+`~/.llm/`. Includes a desktop GUI for visual management.
 
 ## Installation
 
@@ -27,9 +27,9 @@ pixi install
 python3 llm.py --help
 ```
 
-### Standalone app 
+### Standalone GUI app
 
-Build a self-contained `.app` and `.dmg` — no Python or Pixi needed
+Build a self-contained Dashboard `.app` and `.dmg` — no Python or Pixi needed
 to run the result:
 
 ```bash
@@ -79,7 +79,8 @@ Install whichever providers you need separately:
 | `llm default [provider model]` | Show or set the default |
 | `llm download <provider> <model>` | Download a model |
 | `llm provider info` | Show provider details |
-| `llm provider set <provider> <path>` | Set the executable path for a provider |
+| `llm provider set <provider> <path>` | Set the executable path for a provider (includes ollama) |
+| `llm gui` | Launch the desktop GUI (requires wxPython) |
 
 Run `llm --help` or `llm <command> --help` for full option details.
 

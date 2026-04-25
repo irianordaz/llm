@@ -11,6 +11,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -40,6 +41,7 @@ PROVIDER_MODEL_DIRS = {
 }
 
 DEFAULT_PROVIDER_PATHS: dict[str, str] = {
+    'ollama': '/usr/local/bin/ollama',
     'mlx-lm': '/opt/homebrew/bin/mlx_lm',
 }
 
@@ -170,9 +172,11 @@ def is_process_alive(pid: int) -> bool:
 
 
 def get_ollama_models() -> list[str]:
+    path = _get_provider_path('ollama')
+    binary = path if path and Path(path).is_file() else 'ollama'
     try:
         result = subprocess.run(
-            ['ollama', 'ls'],
+            [binary, 'ls'],
             capture_output=True,
             text=True,
             check=True,
@@ -334,20 +338,51 @@ def _build_run_cmd(
 ) -> tuple[list[str], str | None]:
     """Return (command, cwd). cwd is set only when a pixi env directory is used."""
     if provider == 'ollama':
-        return ['ollama', 'run', model] + passthrough, None
+        path = _get_provider_path('ollama')
+        binary = path if path and Path(path).is_file() else 'ollama'
+        return [binary, 'run', model] + passthrough, None
 
     if provider == 'mlx-lm':
         path = _get_provider_path('mlx-lm')
         if path and Path(path).is_file():
-            cmd = [path, 'server', '--model', model, '--host', host, '--port', str(port)]
+            cmd = [
+                path,
+                'server',
+                '--model',
+                model,
+                '--host',
+                host,
+                '--port',
+                str(port),
+            ]
         else:
-            cmd = [_python_executable(), '-m', 'mlx_lm.server', '--model', model, '--host', host, '--port', str(port)]
+            cmd = [
+                _python_executable(),
+                '-m',
+                'mlx_lm.server',
+                '--model',
+                model,
+                '--host',
+                host,
+                '--port',
+                str(port),
+            ]
         return cmd + passthrough, None
 
     if provider == 'vllm-mlx':
         path = _get_provider_path('vllm-mlx')
         if path and _is_pixi_env(path):
-            cmd = ['pixi', 'run', 'vllm-mlx', 'serve', model, '--host', host, '--port', str(port)]
+            cmd = [
+                'pixi',
+                'run',
+                'vllm-mlx',
+                'serve',
+                model,
+                '--host',
+                host,
+                '--port',
+                str(port),
+            ]
             return cmd + passthrough, path
         cmd = ['vllm', 'serve', model, '--host', host, '--port', str(port)]
         return cmd + passthrough, None
@@ -440,8 +475,10 @@ def cmd_stop(args: argparse.Namespace, _: list[str]) -> None:
         print(f'Process {pid} is no longer running.')
 
     if provider == 'ollama' and model:
+        o_path = _get_provider_path('ollama')
+        binary = o_path if o_path and Path(o_path).is_file() else 'ollama'
         try:
-            subprocess.run(['ollama', 'stop', model], check=True)
+            subprocess.run([binary, 'stop', model], check=True)
             print(f'Unloaded ollama model: {model}')
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
@@ -500,7 +537,9 @@ def cmd_download(args: argparse.Namespace, _: list[str]) -> None:
     model = args.model
 
     if provider == 'ollama':
-        cmd = ['ollama', 'pull', model]
+        path = _get_provider_path('ollama')
+        binary = path if path and Path(path).is_file() else 'ollama'
+        cmd = [binary, 'pull', model]
         missing_hint = 'Install ollama from https://ollama.com'
     else:
         cmd = ['huggingface-cli', 'download', model]
@@ -526,8 +565,12 @@ def cmd_download(args: argparse.Namespace, _: list[str]) -> None:
 
 def _provider_executable(provider: str) -> tuple[str, bool]:
     if provider == 'ollama':
-        path = shutil.which('ollama')
-        return (path, True) if path else ('not found', False)
+        path = _get_provider_path('ollama')
+        if path:
+            exists = Path(path).is_file() and os.access(path, os.X_OK)
+            return (path, exists)
+        fallback = shutil.which('ollama')
+        return (fallback, True) if fallback else ('not found', False)
 
     if provider == 'mlx-lm':
         path = _get_provider_path('mlx-lm')
@@ -548,6 +591,52 @@ def _provider_executable(provider: str) -> tuple[str, bool]:
         return (vllm, True) if vllm else ('not found', False)
 
     return ('unknown', False)
+
+
+def discover_running_models() -> list[dict]:
+    """Probe provider endpoints to detect running models started outside llm."""
+    results: list[dict] = []
+
+    # Check ollama
+    try:
+        resp = urllib.request.urlopen(
+            f'http://{DEFAULT_HOST}:{DEFAULT_PORTS["ollama"]}/api/tags',
+            timeout=2,
+        )
+        data = json.loads(resp.read())
+        for model in data.get('models', []):
+            results.append(
+                {
+                    'provider': 'ollama',
+                    'model': model['name'],
+                    'host': DEFAULT_HOST,
+                    'port': DEFAULT_PORTS['ollama'],
+                }
+            )
+    except Exception:
+        pass
+
+    # Check mlx-lm / vllm-mlx
+    for provider in ('mlx-lm', 'vllm-mlx'):
+        try:
+            resp = urllib.request.urlopen(
+                f'http://{DEFAULT_HOST}:{DEFAULT_PORTS[provider]}/v1/models',
+                timeout=2,
+            )
+            data = json.loads(resp.read())
+            for model in data.get('data', []):
+                results.append(
+                    {
+                        'provider': provider,
+                        'model': model['id'],
+                        'host': DEFAULT_HOST,
+                        'port': DEFAULT_PORTS[provider],
+                    }
+                )
+        except Exception:
+            pass
+
+    return results
 
 
 def cmd_provider_info(args: argparse.Namespace, _: list[str]) -> None:
@@ -578,15 +667,15 @@ def cmd_provider_info(args: argparse.Namespace, _: list[str]) -> None:
 
 def cmd_gui(args: argparse.Namespace, _: list[str]) -> None:
     try:
-        import llm_gui
+        import llm_dashboard
     except ImportError:
         print(
-            'Error: GUI requires wxPython.\n'
-            'Install with: pip install wxPython  (or: pixi install)',
+             'Error: GUI requires wxPython.\n'
+             'Install with: pip install wxPython   (or: pixi install)',
             file=sys.stderr,
         )
         sys.exit(1)
-    llm_gui.main()
+    llm_dashboard.main()
 
 
 # ---------------------------------------------------------------------------
