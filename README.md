@@ -66,7 +66,6 @@ Install whichever providers you need separately:
 | ollama | <https://ollama.com> |
 | mlx-lm | `pip install mlx-lm` |
 | vllm-mlx | `pip install vllm` (Apple Silicon) |
-| HuggingFace CLI | `pip install huggingface-hub` |
 
 ## Commands
 
@@ -74,12 +73,13 @@ Install whichever providers you need separately:
 |---|---|
 | `llm ls` | List all locally downloaded models |
 | `llm ps` | Show the currently running model |
-| `llm run [provider model]` | Start a model (uses default if no args) |
+| `llm run [provider model] [--ctx N]` | Start a model (uses default if no args) |
 | `llm stop` | Stop the running model — no args needed |
 | `llm default [provider model]` | Show or set the default |
 | `llm download <provider> <model>` | Download a model |
+| `llm rm <provider> <model>` | Delete a local model |
 | `llm provider info` | Show provider details |
-| `llm provider set <provider> <path>` | Set the executable path for a provider (includes ollama) |
+| `llm provider set <provider> <path>` | Set the executable path for a provider |
 | `llm gui` | Launch the desktop GUI (requires wxPython) |
 
 Run `llm --help` or `llm <command> --help` for full option details.
@@ -179,15 +179,24 @@ llm run mlx-lm <model> [flags]
 llm run mlx-lm <model> --host 0.0.0.0 --port 8081
 ```
 
-Any flag not recognised by `llm` is forwarded directly to the
-provider binary:
+**Flags:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--host` | `127.0.0.1` | Bind address for the server |
+| `--port` | provider default | Port number |
+| `--ctx N` | provider default | Context window length — maps to `--num-ctx` (ollama, via `OLLAMA_NUM_CTX`), `--max-tokens` (mlx-lm), `--max-model-len` (vllm-mlx) |
+
+Any flag not recognised by `llm` is forwarded directly to the provider binary:
 
 ```bash
 llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \
-    --port 8080 --chat-template chatml --max-tokens 2048
+    --port 8080 --chat-template chatml
+
+llm run ollama llama3.2 --ctx 32768
 
 llm run vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \
-    --port 8080 --max-model-len 4096 --dtype float16
+    --port 8080 --dtype float16
 ```
 
 **Provider behaviour:**
@@ -207,15 +216,63 @@ Host       127.0.0.1
 Port       8080
 Base URL   http://127.0.0.1:8080/v1
 PID        12345
-Started    2026-04-25T12:00:00
+Started    2026-04-26T09:12:00
 Status     running
 ```
 
 ### `llm stop`
 
-Stops whichever model is currently running — reads the state file,
-sends `SIGTERM` to the saved PID, and for ollama also calls
-`ollama stop <model>` to free GPU memory.
+Stops whichever model is currently running. Reads the state file and:
+
+- If a PID is stored — sends `SIGTERM` to the entire process group (catches
+  child processes such as vllm workers spawned by pixi)
+- If no PID is stored (model was auto-detected externally) — finds the
+  listening process on the saved port via `lsof` and signals it
+- For **ollama** — also calls `ollama stop <model>` to free GPU memory
+
+```bash
+llm stop
+```
+
+### `llm rm`
+
+Permanently deletes a local model.
+
+```bash
+llm rm ollama llama3.2
+llm rm mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
+llm rm vllm-mlx mlx-community/Mistral-7B-v0.1-4bit
+```
+
+- **ollama** — calls `ollama rm <model>`
+- **mlx-lm / vllm-mlx** — removes the model directory from the shared
+  HuggingFace cache (`~/.cache/huggingface/hub`). Deleting via either
+  provider name removes the files for both.
+
+## Dashboard
+
+Open the desktop GUI with:
+
+```bash
+llm gui
+```
+
+Or double-click `llm.app` if you installed the standalone app.
+
+The dashboard provides a visual interface for all CLI operations:
+
+- **Models tab** — browse every local model (ollama and HuggingFace).
+  Single-click **Run selected** starts immediately using saved settings.
+  **Double-click** a model to open the settings dialog (host, port, context
+  window) — settings are saved and reused on future runs.
+  **Delete** removes a model permanently.
+- **Status banner** — shows the currently running model with provider, URL,
+  and PID. **Stop** terminates the server. **Refresh** re-probes the live
+  HTTP endpoints to verify current state.
+- **Providers tab** — executable paths, ports, and base URLs per provider.
+
+Models started from the dashboard keep running when the window is closed
+(`CMD+W` / `CMD+Q`). Use the Stop button or `llm stop` to shut them down.
 
 ## Examples
 
@@ -232,20 +289,24 @@ llm download mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
 llm default mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
 llm run
 
+# Run with a specific context window
+llm run ollama llama3.2 --ctx 32768
+llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit --ctx 32768
+
 # Run ollama on a specific host and port
 llm run ollama llama3.2 --host 0.0.0.0 --port 11434
 
 # Run mlx-lm with provider-specific flags
 llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \
-    --port 8080 --chat-template chatml --max-tokens 2048
-
-# Run vllm-mlx with provider-specific flags
-llm run vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \
-    --port 8080 --max-model-len 4096 --dtype float16
+    --port 8080 --chat-template chatml
 
 # Inspect and stop
 llm ps
 llm stop
+
+# Delete a model
+llm rm ollama llama3.2
+llm rm mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
 ```
 
 ## Reference
@@ -271,4 +332,4 @@ llm stop
 | File | Purpose |
 |---|---|
 | `~/.llm/state.json` | Active session — provider, model, PID, port |
-| `~/.llm/config.json` | Saved default provider, model, and provider paths |
+| `~/.llm/config.json` | Saved default, provider paths, and per-model settings (host, port, context window) |

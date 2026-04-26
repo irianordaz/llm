@@ -915,9 +915,19 @@
                             <li><a href="#cmd-run">llm run</a></li>
                             <li><a href="#cmd-ps">llm ps</a></li>
                             <li><a href="#cmd-stop">llm stop</a></li>
+                            <li><a href="#cmd-rm">llm rm</a></li>
                         </ul>
                         <li><a href="#examples">Examples</a></li>
                         <li><a href="#reference">Quick reference</a></li>
+                    </ul>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-label">Dashboard</div>
+                    <ul>
+                        <li><a href="#dashboard">Overview</a></li>
+                        <li><a href="#dashboard-models">Models tab</a></li>
+                        <li><a href="#dashboard-status">Status banner</a></li>
+                        <li><a href="#dashboard-providers">Providers tab</a></li>
                     </ul>
                 </div>
                 <div class="nav-section">
@@ -1154,6 +1164,17 @@ A unified CLI and GUI wrapper that gives
                             <span class="cmd-desc"
                                 >Download a model via ollama pull or
                                 huggingface-cli.</span
+                            >
+                        </div>
+                        <div class="cmd-row">
+                            <span class="cmd-sig"
+                                >llm rm
+                                <span class="arg"
+                                    >&lt;provider&gt; &lt;model&gt;</span
+                                ></span
+                            >
+                            <span class="cmd-desc"
+                                >Permanently delete a local model.</span
                             >
                         </div>
                         <div class="cmd-row">
@@ -1558,16 +1579,51 @@ A unified CLI and GUI wrapper that gives
                     <section id="cmd-stop">
                         <h3>llm stop</h3>
                         <p>
-                            Reads the state file, sends <code>SIGTERM</code> to
-                            the saved PID, and clears the state. For
-                            <strong>ollama</strong>, also calls
-                            <code>ollama stop &lt;model&gt;</code> to release
-                            GPU memory. No arguments are required.
+                            Reads the state file and stops whichever model is
+                            running. No arguments are required.
                         </p>
+                        <ul style="margin: 0.5rem 0 0.75rem 1.25rem; color: var(--text-muted); font-size: 0.9rem; line-height: 1.8">
+                            <li>If a <strong>PID is stored</strong> — sends <code>SIGTERM</code> to the entire process group, catching child processes such as vllm workers spawned by pixi.</li>
+                            <li>If <strong>no PID is stored</strong> (model was auto-detected externally) — finds the listening process on the saved port via <code>lsof</code> and signals it.</li>
+                            <li>For <strong>ollama</strong> — also calls <code>ollama stop &lt;model&gt;</code> to release GPU memory.</li>
+                        </ul>
                           <div class="term">
                               <button class="copy-btn">Copy</button>
                               <div class="term-body">
                                   <code><span class="cmd">llm stop</span>&#10;<span class="out">Sent SIGTERM to PID 42107.</span>&#10;<span class="out">Stopped mlx-lm: mlx-community/Llama-3.2-3B-Instruct-4bit</span></code></div>
+                          </div>
+                    </section>
+
+                    <!-- rm -->
+                    <section id="cmd-rm">
+                        <h3>llm rm</h3>
+                        <p>
+                            Permanently deletes a local model.
+                        </p>
+                        <div class="tbl-wrap" style="margin: 0.75rem 0">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Provider</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>ollama</code></td>
+                                        <td>Calls <code>ollama rm &lt;model&gt;</code></td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>mlx-lm</code> / <code>vllm-mlx</code></td>
+                                        <td>Removes the model directory from the shared HuggingFace cache (<code>~/.cache/huggingface/hub</code>). Deleting via either provider name removes the files for both.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                          <div class="term">
+                              <button class="copy-btn">Copy</button>
+                              <div class="term-body">
+                                  <code><span class="cmd">llm rm</span> ollama llama3.2&#10;<span class="cmd">llm rm</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># same cache directory — removes for both mlx-lm and vllm-mlx</span>&#10;<span class="cmd">llm rm</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit</code></div>
                           </div>
                     </section>
                 </section>
@@ -1834,13 +1890,161 @@ A unified CLI and GUI wrapper that gives
                                             font-size: 0.8rem;
                                             color: var(--text-muted);
                                         "
-                                        >Saved default provider, model, and
-                                        provider paths</span
+                                        >Saved default, provider paths, and per-model settings (host, port, context window)</span
                                     >
                                 </div>
                             </div>
                         </div>
                     </div>
+                </section>
+
+                <div class="grad-line"></div>
+
+                <!-- Dashboard -->
+                <section id="dashboard">
+                    <h2>Dashboard</h2>
+                    <p>
+                        The dashboard is a native macOS GUI built with wxPython.
+                        Launch it from the CLI or by double-clicking
+                        <code>llm.app</code>.
+                    </p>
+                    <div class="term" style="margin: 0.25rem 0 1.5rem">
+                        <button class="copy-btn">Copy</button>
+                        <div class="term-body">
+                            <code><span class="cmd">llm gui</span></code>
+                        </div>
+                    </div>
+
+                    <!-- SVG screenshot -->
+                    <div style="margin: 0 0 2rem; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.5); border: 1px solid var(--border);">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 520" style="display:block;width:100%;">
+                            <!-- Window background -->
+                            <rect width="740" height="520" fill="#09090f"/>
+                            <!-- Title bar -->
+                            <rect x="0" y="0" width="740" height="36" fill="#101018"/>
+                            <!-- Traffic lights -->
+                            <circle cx="22" cy="18" r="5.5" fill="#ff5f57"/>
+                            <circle cx="40" cy="18" r="5.5" fill="#febc2e"/>
+                            <circle cx="58" cy="18" r="5.5" fill="#28c840"/>
+                            <!-- Window title -->
+                            <text x="370" y="23" font-family="system-ui,-apple-system,sans-serif" font-size="11.5" fill="#5050a0" text-anchor="middle">LLM Dashboard</text>
+                            <!-- App header -->
+                            <text x="22" y="67" font-family="system-ui,-apple-system,sans-serif" font-size="21" font-weight="700" fill="#a78bfa">LLM Dashboard</text>
+                            <text x="194" y="67" font-family="system-ui,-apple-system,sans-serif" font-size="13" fill="#7070a8">  model manager</text>
+                            <!-- Status banner -->
+                            <rect x="16" y="78" width="708" height="64" rx="8" fill="#101018"/>
+                            <circle cx="44" cy="110" r="8" fill="#34d399"/>
+                            <text x="67" y="104" font-family="system-ui,-apple-system,sans-serif" font-size="13" font-weight="600" fill="#d4d4f0">mlx-lm    ·   mlx-community/Llama-3.2-3B-Instruct-4bit</text>
+                            <text x="67" y="123" font-family="'Courier New',monospace" font-size="10.5" fill="#7070a8">http://127.0.0.1:8080/v1    PID 12847    started 2026-04-26T09:12:00</text>
+                            <rect x="563" y="98" width="54" height="23" rx="4" fill="#1a1a2e" stroke="#2a2a4a" stroke-width="1"/>
+                            <text x="590" y="114" font-family="system-ui,-apple-system,sans-serif" font-size="11.5" fill="#d4d4f0" text-anchor="middle">Stop</text>
+                            <rect x="625" y="98" width="64" height="23" rx="4" fill="#1a1a2e" stroke="#2a2a4a" stroke-width="1"/>
+                            <text x="657" y="114" font-family="system-ui,-apple-system,sans-serif" font-size="11.5" fill="#d4d4f0" text-anchor="middle">Refresh</text>
+                            <!-- Notebook background -->
+                            <rect x="16" y="156" width="708" height="338" rx="8" fill="#101018"/>
+                            <!-- Active tab: Models -->
+                            <rect x="16" y="156" width="78" height="27" rx="4" fill="#1e1e36" stroke="#2e2e50" stroke-width="1"/>
+                            <text x="55" y="174" font-family="system-ui,-apple-system,sans-serif" font-size="12" fill="#d4d4f0" text-anchor="middle">Models</text>
+                            <text x="127" y="174" font-family="system-ui,-apple-system,sans-serif" font-size="12" fill="#7070a8" text-anchor="middle">Providers</text>
+                            <!-- Toolbar -->
+                            <text x="30" y="207" font-family="system-ui,-apple-system,sans-serif" font-size="13.5" font-weight="700" fill="#d4d4f0">Local models</text>
+                            <rect x="567" y="194" width="78" height="23" rx="4" fill="#1a1a2e" stroke="#2a2a4a" stroke-width="1"/>
+                            <text x="606" y="210" font-family="system-ui,-apple-system,sans-serif" font-size="11" fill="#d4d4f0" text-anchor="middle">Download…</text>
+                            <rect x="653" y="194" width="56" height="23" rx="4" fill="#1a1a2e" stroke="#2a2a4a" stroke-width="1"/>
+                            <text x="681" y="210" font-family="system-ui,-apple-system,sans-serif" font-size="11" fill="#d4d4f0" text-anchor="middle">Refresh</text>
+                            <!-- Column headers -->
+                            <rect x="16" y="224" width="708" height="22" fill="#0f0f1a"/>
+                            <text x="30" y="239" font-family="system-ui,-apple-system,sans-serif" font-size="10.5" fill="#7070a8">Provider</text>
+                            <text x="184" y="239" font-family="system-ui,-apple-system,sans-serif" font-size="10.5" fill="#7070a8">Model</text>
+                            <text x="594" y="239" font-family="system-ui,-apple-system,sans-serif" font-size="10.5" fill="#7070a8">Source</text>
+                            <line x1="16" y1="246" x2="724" y2="246" stroke="#1a1a30" stroke-width="1"/>
+                            <!-- Row 1: ollama llama3.2 -->
+                            <rect x="16" y="246" width="708" height="30" fill="#101018"/>
+                            <text x="30" y="265" font-family="'Courier New',monospace" font-size="11.5" fill="#a78bfa">ollama</text>
+                            <text x="184" y="265" font-family="'Courier New',monospace" font-size="11.5" fill="#d4d4f0">llama3.2:latest</text>
+                            <text x="594" y="265" font-family="'Courier New',monospace" font-size="11.5" fill="#7070a8">ollama</text>
+                            <!-- Row 2 selected: mlx-lm -->
+                            <rect x="16" y="276" width="708" height="30" fill="#191930"/>
+                            <rect x="16" y="276" width="3" height="30" fill="#a78bfa"/>
+                            <text x="30" y="295" font-family="'Courier New',monospace" font-size="11.5" fill="#a78bfa">mlx-lm</text>
+                            <text x="184" y="295" font-family="'Courier New',monospace" font-size="11.5" fill="#d4d4f0">mlx-community/Llama-3.2-3B-Instruct-4bit</text>
+                            <text x="594" y="295" font-family="'Courier New',monospace" font-size="11.5" fill="#7070a8">huggingface</text>
+                            <!-- Row 3: vllm-mlx -->
+                            <rect x="16" y="306" width="708" height="30" fill="#0d0d18"/>
+                            <text x="30" y="325" font-family="'Courier New',monospace" font-size="11.5" fill="#a78bfa">vllm-mlx</text>
+                            <text x="184" y="325" font-family="'Courier New',monospace" font-size="11.5" fill="#d4d4f0">mlx-community/Llama-3.2-3B-Instruct-4bit</text>
+                            <text x="594" y="325" font-family="'Courier New',monospace" font-size="11.5" fill="#7070a8">huggingface</text>
+                            <!-- Row 4: ollama mistral -->
+                            <rect x="16" y="336" width="708" height="30" fill="#101018"/>
+                            <text x="30" y="355" font-family="'Courier New',monospace" font-size="11.5" fill="#a78bfa">ollama</text>
+                            <text x="184" y="355" font-family="'Courier New',monospace" font-size="11.5" fill="#d4d4f0">mistral:latest</text>
+                            <text x="594" y="355" font-family="'Courier New',monospace" font-size="11.5" fill="#7070a8">ollama</text>
+                            <!-- Row 5: mlx-lm gemma -->
+                            <rect x="16" y="366" width="708" height="30" fill="#0d0d18"/>
+                            <text x="30" y="385" font-family="'Courier New',monospace" font-size="11.5" fill="#a78bfa">mlx-lm</text>
+                            <text x="184" y="385" font-family="'Courier New',monospace" font-size="11.5" fill="#d4d4f0">mlx-community/gemma-3-4b-it-4bit</text>
+                            <text x="594" y="385" font-family="'Courier New',monospace" font-size="11.5" fill="#7070a8">huggingface</text>
+                            <!-- Row 6: vllm-mlx gemma -->
+                            <rect x="16" y="396" width="708" height="30" fill="#101018"/>
+                            <text x="30" y="415" font-family="'Courier New',monospace" font-size="11.5" fill="#a78bfa">vllm-mlx</text>
+                            <text x="184" y="415" font-family="'Courier New',monospace" font-size="11.5" fill="#d4d4f0">mlx-community/gemma-3-4b-it-4bit</text>
+                            <text x="594" y="415" font-family="'Courier New',monospace" font-size="11.5" fill="#7070a8">huggingface</text>
+                            <!-- Action buttons -->
+                            <rect x="30" y="446" width="100" height="27" rx="4" fill="#1a1a2e" stroke="#2a2a4a" stroke-width="1"/>
+                            <text x="80" y="463" font-family="system-ui,-apple-system,sans-serif" font-size="11.5" fill="#d4d4f0" text-anchor="middle">Run selected</text>
+                            <rect x="140" y="446" width="60" height="27" rx="4" fill="#1a1a2e" stroke="#2a2a4a" stroke-width="1"/>
+                            <text x="170" y="463" font-family="system-ui,-apple-system,sans-serif" font-size="11.5" fill="#d4d4f0" text-anchor="middle">Delete</text>
+                            <!-- Status bar -->
+                            <rect x="0" y="494" width="740" height="26" fill="#0a0a16"/>
+                            <rect x="0" y="494" width="740" height="1" fill="#1a1a2e"/>
+                            <text x="18" y="511" font-family="'Courier New',monospace" font-size="10" fill="#7070a8">Started mlx-lm: mlx-community/Llama-3.2-3B-Instruct-4bit  (PID 12847)</text>
+                        </svg>
+                    </div>
+
+                    <section id="dashboard-models">
+                        <h3>Models tab</h3>
+                        <p>
+                            Lists every locally available model across all
+                            providers — ollama models and HuggingFace models
+                            (shown once for each provider that can load them).
+                        </p>
+                        <ul style="margin: 0.5rem 0 0.75rem 1.25rem; line-height: 1.9">
+                            <li><strong>Single-click Run selected</strong> — starts the model immediately using saved settings, or provider defaults if none are saved.</li>
+                            <li><strong>Double-click</strong> — opens the settings dialog where you can change host, port, and context window length. Settings are saved and reused on future single-click runs.</li>
+                            <li><strong>Delete</strong> — permanently removes the selected model (calls <code>llm rm</code> under the hood). HuggingFace models are deleted from the shared cache, removing them for both mlx-lm and vllm-mlx.</li>
+                        </ul>
+                    </section>
+
+                    <section id="dashboard-status">
+                        <h3>Status banner</h3>
+                        <p>
+                            Shows the currently running model with its provider,
+                            base URL, PID, and start time. Updated every 2 seconds
+                            by probing the provider's HTTP endpoint.
+                        </p>
+                        <ul style="margin: 0.5rem 0 0.75rem 1.25rem; line-height: 1.9">
+                            <li><strong>Stop</strong> — terminates the server (sends SIGTERM to the process group; falls back to port-based kill for externally-started models).</li>
+                            <li><strong>Refresh</strong> — immediately re-probes the live HTTP endpoints to verify current state, bypassing the 2-second polling interval.</li>
+                        </ul>
+                        <div class="callout callout-info">
+                            <span class="callout-icon">ℹ</span>
+                            <div class="callout-body">
+                                Models started from the dashboard keep running
+                                when the window is closed (<kbd>CMD+W</kbd> /
+                                <kbd>CMD+Q</kbd>). Use <strong>Stop</strong> or
+                                <code>llm stop</code> to shut them down.
+                            </div>
+                        </div>
+                    </section>
+
+                    <section id="dashboard-providers">
+                        <h3>Providers tab</h3>
+                        <p>
+                            Displays the executable path, default port, base URL,
+                            and model directory for each provider — the same
+                            information as <code>llm provider info</code>.
+                        </p>
+                    </section>
                 </section>
 
                 <div class="grad-line"></div>
