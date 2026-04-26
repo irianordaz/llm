@@ -34,6 +34,8 @@ BASE_URL_TEMPLATES = {
 HF_CACHE_DIR = Path.home() / '.cache' / 'huggingface' / 'hub'
 OLLAMA_MODEL_DIR = Path.home() / '.ollama' / 'models'
 
+DEFAULT_CTX = 65000
+
 PROVIDER_MODEL_DIRS = {
     'ollama': OLLAMA_MODEL_DIR,
     'mlx-lm': HF_CACHE_DIR,
@@ -166,6 +168,31 @@ def is_process_alive(pid: int) -> bool:
         return True
 
 
+def _pids_on_port(port: int) -> list[int]:
+    """Return PIDs of processes listening on *port* (macOS/Linux via lsof)."""
+    try:
+        result = subprocess.run(
+            ['lsof', '-ti', f':{port}', '-sTCP:LISTEN'],
+            capture_output=True,
+            text=True,
+        )
+        return [int(p) for p in result.stdout.split() if p.strip().isdigit()]
+    except Exception:
+        return []
+
+
+def _kill_process(pid: int) -> None:
+    """Send SIGTERM to the process group of *pid*, falling back to the PID itself."""
+    try:
+        pgid = os.getpgid(pid)
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, OSError):
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Model discovery
 # ---------------------------------------------------------------------------
@@ -206,6 +233,61 @@ def get_huggingface_models() -> list[str]:
         name = entry.name.removeprefix('models--')
         models.append('/'.join(name.split('--')))
     return models
+
+
+# ---------------------------------------------------------------------------
+# Model deletion
+# ---------------------------------------------------------------------------
+
+
+def delete_model(provider: str, model: str) -> tuple[bool, str]:
+    """Delete a local model. Returns (success, message)."""
+    if provider == 'ollama':
+        path = _get_provider_path('ollama')
+        binary = path if path and Path(path).is_file() else 'ollama'
+        try:
+            result = subprocess.run(
+                [binary, 'rm', model],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return True, f'Deleted ollama model: {model}'
+        except FileNotFoundError:
+            return False, 'ollama not found.'
+        except subprocess.CalledProcessError as err:
+            detail = (err.stderr or err.stdout or str(err)).strip()
+            return False, f'ollama rm failed: {detail}'
+
+    if provider in ('mlx-lm', 'vllm-mlx'):
+        # "org/model-name" → "models--org--model-name"
+        dir_name = 'models--' + model.replace('/', '--')
+        model_dir = HF_CACHE_DIR / dir_name
+        if not model_dir.exists():
+            return False, f'Model directory not found: {model_dir}'
+        try:
+            shutil.rmtree(model_dir)
+            return True, f'Deleted {model}'
+        except OSError as err:
+            return False, f'Failed to delete {model_dir}: {err}'
+
+    return False, f'Unknown provider: {provider}'
+
+
+# ---------------------------------------------------------------------------
+# Subcommand: rm
+# ---------------------------------------------------------------------------
+
+
+def cmd_rm(args: argparse.Namespace, _: list[str]) -> None:
+    provider = args.provider
+    model = args.model
+    success, msg = delete_model(provider, model)
+    if success:
+        print(msg)
+    else:
+        print(f'Error: {msg}', file=sys.stderr)
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -335,15 +417,19 @@ def _build_run_cmd(
     host: str,
     port: int,
     passthrough: list[str],
+    ctx: int | None = None,
 ) -> tuple[list[str], str | None]:
     """Return (command, cwd). cwd is set only when a pixi env directory is used."""
     if provider == 'ollama':
         path = _get_provider_path('ollama')
         binary = path if path and Path(path).is_file() else 'ollama'
+        # ctx is passed via OLLAMA_NUM_CTX env var by the caller; --num-ctx is not a
+        # valid ollama run flag.
         return [binary, 'run', model] + passthrough, None
 
     if provider == 'mlx-lm':
         path = _get_provider_path('mlx-lm')
+        ctx_flags = ['--max-tokens', str(ctx)] if ctx is not None else []
         if path and Path(path).is_file():
             cmd = [
                 path,
@@ -367,10 +453,11 @@ def _build_run_cmd(
                 '--port',
                 str(port),
             ]
-        return cmd + passthrough, None
+        return cmd + ctx_flags + passthrough, None
 
     if provider == 'vllm-mlx':
         path = _get_provider_path('vllm-mlx')
+        ctx_flags = ['--max-model-len', str(ctx)] if ctx is not None else []
         if path and _is_pixi_env(path):
             cmd = [
                 'pixi',
@@ -383,9 +470,9 @@ def _build_run_cmd(
                 '--port',
                 str(port),
             ]
-            return cmd + passthrough, path
+            return cmd + ctx_flags + passthrough, path
         cmd = ['vllm', 'serve', model, '--host', host, '--port', str(port)]
-        return cmd + passthrough, None
+        return cmd + ctx_flags + passthrough, None
 
     print(f'Unknown provider: {provider}', file=sys.stderr)
     sys.exit(1)
@@ -409,12 +496,15 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
     host = getattr(args, 'host', DEFAULT_HOST)
     port_arg = getattr(args, 'port', None)
     port = port_arg if port_arg is not None else DEFAULT_PORTS[provider]
+    ctx = getattr(args, 'ctx', DEFAULT_CTX)
 
     env = os.environ.copy()
     if provider == 'ollama':
         env['OLLAMA_HOST'] = f'{host}:{port}'
+        if ctx is not None:
+            env['OLLAMA_NUM_CTX'] = str(ctx)
 
-    cmd, cwd = _build_run_cmd(provider, model, host, port, passthrough)
+    cmd, cwd = _build_run_cmd(provider, model, host, port, passthrough, ctx)
     print(f'Starting {provider}: {model}  ({host}:{port})')
 
     try:
@@ -461,24 +551,28 @@ def cmd_stop(args: argparse.Namespace, _: list[str]) -> None:
     provider = state.get('provider')
     model = state.get('model')
     pid = state.get('pid')
+    port = state.get('port')
 
     if pid and is_process_alive(pid):
-        try:
-            os.kill(pid, signal.SIGTERM)
-            print(f'Sent SIGTERM to PID {pid}.')
-        except PermissionError:
-            print(
-                f'Warning: no permission to signal PID {pid}.',
-                file=sys.stderr,
-            )
+        _kill_process(pid)
+        print(f'Sent SIGTERM to PID {pid}.')
+    elif port:
+        # Model was detected externally (no PID stored) — find it by port.
+        port_pids = _pids_on_port(port)
+        if port_pids:
+            for p in port_pids:
+                _kill_process(p)
+            print(f'Sent SIGTERM to processes on port {port}: {port_pids}')
+        else:
+            print(f'No process found on port {port}.')
     else:
-        print(f'Process {pid} is no longer running.')
+        print('No PID or port available to signal.')
 
     if provider == 'ollama' and model:
         o_path = _get_provider_path('ollama')
         binary = o_path if o_path and Path(o_path).is_file() else 'ollama'
         try:
-            subprocess.run([binary, 'stop', model], check=True)
+            subprocess.run([binary, 'stop', model], check=True, capture_output=True)
             print(f'Unloaded ollama model: {model}')
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
@@ -593,35 +687,63 @@ def _provider_executable(provider: str) -> tuple[str, bool]:
     return ('unknown', False)
 
 
+def get_model_settings(provider: str, model: str) -> dict:
+    """Return saved host/port for a model, or empty dict if none saved."""
+    config = read_config()
+    return (
+        config.get('model_settings', {}).get(provider, {}).get(model, {})
+    )
+
+
+def save_model_settings(
+    provider: str, model: str, host: str, port: int, ctx: int | None = None
+) -> None:
+    """Persist host/port/ctx for a model so future runs reuse them."""
+    config = read_config()
+    (
+        config.setdefault('model_settings', {})
+              .setdefault(provider, {})[model]
+    ) = {'host': host, 'port': port, 'ctx': ctx if ctx is not None else DEFAULT_CTX}
+    write_config(config)
+
+
 def discover_running_models() -> list[dict]:
     """Probe provider endpoints to detect running models started outside llm."""
     results: list[dict] = []
+    queried_ports: set[int] = set()
 
-    # Check ollama
+    # Check ollama — /api/ps returns only models currently loaded in memory.
+    # /api/tags would list all downloaded models regardless of running state.
     try:
+        port = DEFAULT_PORTS['ollama']
         resp = urllib.request.urlopen(
-            f'http://{DEFAULT_HOST}:{DEFAULT_PORTS["ollama"]}/api/tags',
-            timeout=2,
+            f'http://{DEFAULT_HOST}:{port}/api/ps',
+            timeout=1,
         )
         data = json.loads(resp.read())
+        queried_ports.add(port)
         for model in data.get('models', []):
             results.append(
                 {
                     'provider': 'ollama',
                     'model': model['name'],
                     'host': DEFAULT_HOST,
-                    'port': DEFAULT_PORTS['ollama'],
+                    'port': port,
                 }
             )
     except Exception:
         pass
 
-    # Check mlx-lm / vllm-mlx
+    # Check mlx-lm / vllm-mlx — they may share a port; query each unique port once.
     for provider in ('mlx-lm', 'vllm-mlx'):
+        port = DEFAULT_PORTS[provider]
+        if port in queried_ports:
+            continue
+        queried_ports.add(port)
         try:
             resp = urllib.request.urlopen(
-                f'http://{DEFAULT_HOST}:{DEFAULT_PORTS[provider]}/v1/models',
-                timeout=2,
+                f'http://{DEFAULT_HOST}:{port}/v1/models',
+                timeout=1,
             )
             data = json.loads(resp.read())
             for model in data.get('data', []):
@@ -630,7 +752,7 @@ def discover_running_models() -> list[dict]:
                         'provider': provider,
                         'model': model['id'],
                         'host': DEFAULT_HOST,
-                        'port': DEFAULT_PORTS[provider],
+                        'port': port,
                     }
                 )
         except Exception:
@@ -670,8 +792,8 @@ def cmd_gui(args: argparse.Namespace, _: list[str]) -> None:
         import llm_dashboard
     except ImportError:
         print(
-             'Error: GUI requires wxPython.\n'
-             'Install with: pip install wxPython   (or: pixi install)',
+            'Error: GUI requires wxPython.\n'
+            'Install with: pip install wxPython   (or: pixi install)',
             file=sys.stderr,
         )
         sys.exit(1)
@@ -770,6 +892,17 @@ def build_parser() -> argparse.ArgumentParser:
         help='Model identifier.',
     )
     _add_network_args(run_parser)
+    run_parser.add_argument(
+        '--ctx',
+        type=int,
+        default=DEFAULT_CTX,
+        metavar='N',
+        help=(
+            f'Context window length (default: {DEFAULT_CTX}). '
+            'Maps to --num-ctx (ollama), --max-tokens (mlx-lm), '
+            '--max-model-len (vllm-mlx).'
+        ),
+    )
     run_parser.set_defaults(func=cmd_run)
 
     # -- stop ----------------------------------------------------------------
@@ -825,6 +958,31 @@ def build_parser() -> argparse.ArgumentParser:
         help='Model identifier to download.',
     )
     download_parser.set_defaults(func=cmd_download)
+
+    # -- rm ------------------------------------------------------------------
+    rm_parser = subparsers.add_parser(
+        'rm',
+        help='Delete a local model.',
+        description=(
+            'Removes a local model from disk.\n'
+            'For ollama, calls "ollama rm <model>".\n'
+            'For mlx-lm / vllm-mlx, deletes the HuggingFace cache directory\n'
+            '(~/.cache/huggingface/hub/models--<org>--<name>).\n'
+            'Because mlx-lm and vllm-mlx share the same cache, deleting\n'
+            'via either provider removes it for both.'
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    rm_parser.add_argument(
+        'provider',
+        choices=PROVIDERS,
+        help='Provider the model belongs to.',
+    )
+    rm_parser.add_argument(
+        'model',
+        help='Model identifier to delete.',
+    )
+    rm_parser.set_defaults(func=cmd_rm)
 
     # -- provider ------------------------------------------------------------
     provider_parser = subparsers.add_parser(

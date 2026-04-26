@@ -455,14 +455,14 @@
                 font-size: 0.82rem;
                 line-height: 1.65;
             }
-            .term-body code {
-                background: none;
-                border: none;
-                padding: 0;
-                font-size: inherit;
-                color: var(--term-text);
-                white-space: pre;
-            }
+              .term-body code {
+                 background: none;
+                 border: none;
+                 padding: 0;
+                 font-size: inherit;
+                 color: var(--term-text);
+                 white-space: pre-wrap;
+              }
             .cmd {
                 color: var(--term-cmd);
             }
@@ -990,110 +990,69 @@ A unified CLI and GUI wrapper that gives
                 <section id="installation">
                     <h2>Installation</h2>
 
-                    <h3 id="install-source">From source</h3>
-                    <p>
-                        Requires <strong>Python 3.9 or newer</strong>. No other
-                        dependencies — <code>llm.py</code> uses only the
-                        standard library.
-                    </p>
-                    <div class="term">
-                        <button
-                            class="copy-btn"
-                            data-copy="git clone &lt;repo&gt;&#10;cd llm&#10;python3 llm.py --help"
-                        >
-                            Copy
-                        </button>
-                        <div class="term-body">
-                            <code
-                                ><span class="cmd">git clone</span>
-                                <span class="flag">&lt;repo&gt;</span>
-                                <span class="cmd">cd</span> llm
-                                <span class="cmd">python3</span> llm.py
-                                --help</code
-                            >
-                        </div>
-                    </div>
-                    <div class="callout callout-info">
-                        <span class="callout-icon">ℹ</span>
-                        <div class="callout-body">
-                            <a href="https://pixi.sh" target="_blank">Pixi</a>
-                            is also supported for a managed environment and is
-                            required for <code>pixi run build</code>. Run
-                            <code>pixi install</code> then use
-                            <code>python3 llm.py</code> as above.
-                        </div>
-                    </div>
+                       <h3 id="install-source">From source</h3>
+                       <p>
+                         Requires <strong>Python 3.9 or newer</strong>. No other
+                         dependencies — <code>llm.py</code> uses only the
+                         standard library.
+                       </p>
+                       <div class="term">
+                           <button class="copy-btn" data-copy="git clone &lt;repo&gt;&#10;cd llm&#10;python3 llm.py --help">
+           Copy
+       </button>
+                           <div class="term-body">
+                               <code><span class="cmd">git clone</span> <span class="flag">&lt;repo&gt;</span>&#10;<span class="cmd">cd</span> llm&#10;<span class="cmd">python3</span> llm.py --help</code>
+                           </div>
+                       </div>
+                       <div class="callout callout-info">
+                           <span class="callout-icon">ℹ</span>
+                           <div class="callout-body">
+                               <a href="https://pixi.sh" target="_blank">Pixi</a>
+                             is also supported for a managed environment and is
+                             required for <code>pixi run build</code>. Run
+                              <code>pixi install</code> then use
+                              <code>python3 llm.py</code> as above.
+                           </div>
+                       </div>
 
-                    <h3 id="install-app">Standalone app</h3>
-                    <p>
-                        Build a completely self-contained
-                        <code>.app</code> bundle and <code>.dmg</code> installer
-                        — no Python or Pixi required to run the result.
-                    </p>
-                    <div class="term">
-                        <button class="copy-btn" data-copy="pixi run build">
-                            Copy
-                        </button>
-                        <div class="term-body">
-                            <code
-                                ><span class="cmt"
-                                    ># produces dist/llm.app and
-                                    dist/llm.dmg</span
-                                >
-                                <span class="cmd">pixi run build</span></code
-                            >
-                        </div>
-                    </div>
+                       <h3 id="install-app">Standalone Dashboard app</h3>
+                       <p>
+                         Build a self-contained dashboard <code>.app</code> and
+                          <code>.dmg</code> — no Python or Pixi needed to run the
+                         result.
+                       </p>
+                       <div class="term">
+                           <button class="copy-btn" data-copy="pixi run build">
+           Copy
+       </button>
+                           <div class="term-body">
+                               <code><span class="cmt"># produces dist/llm.app and dist/llm.dmg</span>&#10;<span class="cmd">pixi run build</span></code>
+                           </div>
+                       </div>
 
-                    <div class="steps">
-                        <div class="step">
-                            <div class="step-num">1</div>
-                            <div class="step-body">
-                                <h4>Install from the DMG</h4>
-                                <p>
-                                    Open <code>dist/llm.dmg</code> and drag
-                                    <code>llm.app</code> to
-                                    <strong>Applications</strong>.
-                                </p>
-                            </div>
-                        </div>
-                        <div class="step">
-                            <div class="step-num">2</div>
-                            <div class="step-body">
-                                <h4>Add to your shell</h4>
-                                <p>
-                                    Append to <code>~/.zshrc</code> or
-                                    <code>~/.bashrc</code>, then reload.
-                                </p>
-                            </div>
-                        </div>
-                        <div class="step">
-                            <div class="step-num">3</div>
-                            <div class="step-body">
-                                <h4>Confirm</h4>
-                                <p>
-                                    Run <code>llm --help</code> in a new
-                                    terminal window.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="term">
-                        <button class="copy-btn">Copy</button>
-                        <div class="term-body">
-                            <code
-                                ><span class="cmt"># Add to ~/.zshrc</span>
-                                <span class="cmd">export</span>
-                                <span class="hl">PATH</span>=<span class="flag"
-                                    >"/Applications/llm.app/Contents/MacOS:$PATH"</span
-                                >
-                                <span class="cmt"># Reload and verify</span>
-                                <span class="cmd">source</span> ~/.zshrc
-                                <span class="cmd">llm</span> --help</code
-                            >
-                        </div>
-                    </div>
+                       <div class="steps">
+                           <div class="step">
+                               <div class="step-num">1</div>
+                               <div class="step-body">
+                                   <h4>Install from the DMG</h4>
+                                   <p>
+                                     Open <code>dist/llm.dmg</code> and drag
+                                      <code>llm.app</code> to
+                                      <strong>Applications</strong>.
+                                   </p>
+                               </div>
+                           </div>
+                           <div class="step">
+                               <div class="step-num">2</div>
+                               <div class="step-body">
+                                   <h4>Launch</h4>
+                                   <p>
+                                     Double-click <code>llm.app</code> in
+                                     Applications to open the dashboard.
+                                   </p>
+                               </div>
+                           </div>
+                       </div>
 
                     <h3 id="install-providers">Provider dependencies</h3>
                     <p>
@@ -1111,39 +1070,28 @@ A unified CLI and GUI wrapper that gives
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr>
-                                    <td><code>ollama</code></td>
-                                    <td>
-                                        <a
-                                            href="https://ollama.com"
-                                            target="_blank"
-                                            >ollama.com</a
-                                        >
-                                    </td>
-                                    <td>Interactive and API server modes</td>
-                                </tr>
-                                <tr>
-                                    <td><code>mlx-lm</code></td>
-                                    <td><code>pip install mlx-lm</code></td>
-                                    <td>Inference API server</td>
-                                </tr>
-                                <tr>
-                                    <td><code>vllm-mlx</code></td>
-                                    <td><code>pip install vllm</code></td>
-                                    <td>Inference API server</td>
-                                </tr>
-                                <tr>
-                                    <td>HuggingFace CLI</td>
-                                    <td>
-                                        <code>pip install huggingface-hub</code>
-                                    </td>
-                                    <td>
-                                        Required for
-                                        <code>llm download</code> with mlx-lm /
-                                        vllm-mlx
-                                    </td>
-                                </tr>
-                            </tbody>
+                                  <tr>
+                                      <td><a href="https://ollama.com" target="_blank">ollama</a></td>
+                                      <td>
+                                          <a
+                                             href="https://ollama.com"
+                                             target="_blank"
+                                              >ollama.com</a
+                                          >
+                                      </td>
+                                      <td>Interactive and API server modes</td>
+                                  </tr>
+                                  <tr>
+                                      <td><a href="https://github.com/ml-explore/mlx-lm" target="_blank">mlx-lm</a></td>
+                                      <td><code>pip install mlx-lm</code></td>
+                                      <td>Inference API server</td>
+                                  </tr>
+                                  <tr>
+                                      <td><a href="https://github.com/waybarrios/vllm-mlx" target="_blank">vllm-mlx</a></td>
+                                      <td><code>pip install vllm</code></td>
+                                      <td>Inference API server</td>
+                                  </tr>
+                              </tbody>
                         </table>
                     </div>
                 </section>
@@ -1171,7 +1119,8 @@ A unified CLI and GUI wrapper that gives
                         <div class="cmd-row">
                             <span class="cmd-sig"
                                 >llm run
-                                <span class="arg">[provider model]</span></span
+                                <span class="arg">[provider model]</span>
+                                <span class="arg">[--ctx N]</span></span
                             >
                             <span class="cmd-desc"
                                 >Start a model. Uses the configured default when
@@ -1256,17 +1205,10 @@ A unified CLI and GUI wrapper that gives
                             <code>~/.cache/huggingface/hub</code>, then prints a
                             combined table labelled by provider.
                         </p>
-                        <div class="term">
-                            <button class="copy-btn">Copy</button>
-                            <div class="term-body"><code><span class="out">PROVIDER            MODEL</span>
-<span class="out">------------------  ----------------------------------------</span>
-<span class="hl">ollama</span>               <span class="flag">gemma4:26b</span>
-<span class="hl">ollama</span>               <span class="flag">gemma4:31b</span>
-<span class="hl">ollama</span>               <span class="flag">qwen3.5:35b</span>
-<span class="hl">mlx-lm / vllm-mlx</span>   <span class="flag">mlx-community/Qwen3.6-35B-A3B-nvfp4</span>
-<span class="hl">mlx-lm / vllm-mlx</span>   <span class="flag">Qwen/Qwen3.6-27B</span>
-<span class="hl">mlx-lm / vllm-mlx</span>   <span class="flag">google/gemma-4-E4B</span></code></div>
-                        </div>
+                         <div class="term">
+                             <button class="copy-btn">Copy</button>
+                             <div class="term-body"><code><span class="out">PROVIDER            MODEL</span>&#10;<span class="out">------------------   ----------------------------------------</span>&#10;<span class="hl">ollama</span>                <span class="flag">gemma4:26b</span>&#10;<span class="hl">ollama</span>                <span class="flag">gemma4:31b</span>&#10;<span class="hl">ollama</span>                <span class="flag">qwen3.5:35b</span>&#10;<span class="hl">mlx-lm / vllm-mlx</span>    <span class="flag">mlx-community/Qwen3.6-35B-A3B-nvfp4</span>&#10;<span class="hl">mlx-lm / vllm-mlx</span>    <span class="flag">Qwen/Qwen3.6-27B</span>&#10;<span class="hl">mlx-lm / vllm-mlx</span>    <span class="flag">google/gemma-4-E4B</span></code></div>
+                         </div>
                         <div class="callout callout-info">
                             <span class="callout-icon">ℹ</span>
                             <div class="callout-body">
@@ -1289,13 +1231,9 @@ A unified CLI and GUI wrapper that gives
                         </p>
                         <div class="card-grid">
                             <div class="prov-card">
-                                <div class="prov-head">
-                                    <span class="prov-name">ollama</span>
-                                    <span class="badge badge-ok"
-                                        ><span class="badge-dot"></span
-                                        >installed</span
-                                    >
-                                </div>
+                                  <div class="prov-head">
+                                      <a href="https://ollama.com" target="_blank" style="color: var(--a); text-decoration: none;"><span class="prov-name">ollama</span></a>
+                                  </div>
                                 <div class="prov-rows">
                                     <div class="prov-row">
                                         <span class="prov-key">Executable</span
@@ -1323,13 +1261,9 @@ A unified CLI and GUI wrapper that gives
                                 </div>
                             </div>
                             <div class="prov-card">
-                                <div class="prov-head">
-                                    <span class="prov-name">mlx-lm</span>
-                                    <span class="badge badge-err"
-                                        ><span class="badge-dot"></span>not
-                                        installed</span
-                                    >
-                                </div>
+                                  <div class="prov-head">
+                                      <a href="https://github.com/ml-explore/mlx-lm" target="_blank" style="color: var(--a); text-decoration: none;"><span class="prov-name">mlx-lm</span></a>
+                                  </div>
                                 <div class="prov-rows">
                                     <div class="prov-row">
                                         <span class="prov-key">Executable</span
@@ -1357,13 +1291,9 @@ A unified CLI and GUI wrapper that gives
                                 </div>
                             </div>
                             <div class="prov-card">
-                                <div class="prov-head">
-                                    <span class="prov-name">vllm-mlx</span>
-                                    <span class="badge badge-err"
-                                        ><span class="badge-dot"></span>not
-                                        installed</span
-                                    >
-                                </div>
+                                  <div class="prov-head">
+                                      <a href="https://github.com/waybarrios/vllm-mlx" target="_blank" style="color: var(--a); text-decoration: none;"><span class="prov-name">vllm-mlx</span></a>
+                                  </div>
                                 <div class="prov-rows">
                                     <div class="prov-row">
                                         <span class="prov-key">Executable</span
@@ -1410,15 +1340,10 @@ A unified CLI and GUI wrapper that gives
                             <code>pixi run</code> from that directory. Otherwise
                             it is treated as a direct executable.
                         </p>
-                        <div class="term">
-                            <button class="copy-btn">Copy</button>
-                            <div class="term-body"><code>                                  <span class="cmt"># Set the ollama executable (default: /usr/local/bin/ollama)</span>
-<span class="cmd">llm provider set</span> ollama /opt/homebrew/bin/ollama
-<span class="cmt"># Set the mlx-lm executable (default: /opt/homebrew/bin/mlx_lm)</span>
-<span class="cmd">llm provider set</span> mlx-lm /opt/homebrew/bin/mlx_lm
-<span class="cmt"># Point vllm-mlx at a pixi environment directory</span>
-<span class="cmd">llm provider set</span> vllm-mlx /path/to/vllm-mlx</code></div>
-                        </div>
+                          <div class="term">
+                              <button class="copy-btn">Copy</button>
+                              <div class="term-body"><code><span class="cmt"># Set the ollama executable (default: /usr/local/bin/ollama)</span>&#10;<span class="cmd">llm provider set</span> ollama /opt/homebrew/bin/ollama&#10;<span class="cmt"># Set the mlx-lm executable (default: /opt/homebrew/bin/mlx_lm)</span>&#10;<span class="cmd">llm provider set</span> mlx-lm /opt/homebrew/bin/mlx_lm&#10;<span class="cmt"># Point vllm-mlx at a pixi environment directory</span>&#10;<span class="cmd">llm provider set</span> vllm-mlx /path/to/vllm-mlx</code></div>
+                          </div>
                         <p>
                             After setting a path,
                             <code>llm provider info</code> reflects the new
@@ -1446,31 +1371,11 @@ A unified CLI and GUI wrapper that gives
                             >
                             to be installed.
                         </p>
-                        <div class="term">
-                            <button class="copy-btn">Copy</button>
-                            <div class="term-body">
-                                <code
-                                    ><span class="cmt"
-                                        ># ollama — uses: ollama pull</span
-                                    >
-                                    <span class="cmd">llm download</span> ollama
-                                    llama3.2
-                                    <span class="cmt"
-                                        ># mlx-lm — uses: huggingface-cli
-                                        download</span
-                                    >
-                                    <span class="cmd">llm download</span> mlx-lm
-                                    mlx-community/Llama-3.2-3B-Instruct-4bit
-                                    <span class="cmt"
-                                        ># vllm-mlx — same HuggingFace
-                                        download</span
-                                    >
-                                    <span class="cmd">llm download</span>
-                                    vllm-mlx
-                                    mlx-community/Mistral-7B-v0.1-4bit</code
-                                >
-                            </div>
-                        </div>
+                          <div class="term">
+                              <button class="copy-btn">Copy</button>
+                              <div class="term-body">
+                                  <code><span class="cmt"># ollama — uses: ollama pull</span>&#10;<span class="cmd">llm download</span> ollama llama3.2&#10;<span class="cmt"># mlx-lm — uses: huggingface-cli download</span>&#10;<span class="cmd">llm download</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># vllm-mlx — same HuggingFace download</span>&#10;<span class="cmd">llm download</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit</code></div>
+                          </div>
                     </section>
 
                     <!-- default -->
@@ -1481,27 +1386,11 @@ A unified CLI and GUI wrapper that gives
                             <code>llm run</code> will use. Configuration is
                             saved to <code>~/.llm/config.json</code>.
                         </p>
-                        <div class="term">
-                            <button class="copy-btn">Copy</button>
-                            <div class="term-body">
-                                <code
-                                    ><span class="cmt"># Set a default</span>
-                                    <span class="cmd">llm default</span> mlx-lm
-                                    mlx-community/Llama-3.2-3B-Instruct-4bit
-                                    <span class="cmt"
-                                        ># Show the current default</span
-                                    >
-                                    <span class="cmd">llm default</span>
-                                    <span class="out"
-                                        >Default provider: mlx-lm</span
-                                    >
-                                    <span class="out"
-                                        >Default model:
-                                        mlx-community/Llama-3.2-3B-Instruct-4bit</span
-                                    ></code
-                                >
-                            </div>
-                        </div>
+                          <div class="term">
+                              <button class="copy-btn">Copy</button>
+                              <div class="term-body">
+                                  <code><span class="cmt"># Set a default</span>&#10;<span class="cmd">llm default</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># Show the current default</span>&#10;<span class="cmd">llm default</span>&#10;<span class="out">Default provider: mlx-lm</span>&#10;<span class="out">Default model: mlx-community/Llama-3.2-3B-Instruct-4bit</span></code></div>
+                          </div>
                     </section>
 
                     <!-- run -->
@@ -1552,48 +1441,46 @@ A unified CLI and GUI wrapper that gives
                             </table>
                         </div>
 
-                        <div class="term">
-                            <button class="copy-btn">Copy</button>
-                            <div class="term-body">
-                                <code
-                                    ><span class="cmt"
-                                        ># Run the configured default</span
-                                    >
-                                    <span class="cmd">llm run</span>
-                                    <span class="cmt"
-                                        ># Run a specific provider + model</span
-                                    >
-                                    <span class="cmd">llm run</span> ollama
-                                    llama3.2
-                                    <span class="cmd">llm run</span> mlx-lm
-                                    mlx-community/Llama-3.2-3B-Instruct-4bit
-                                    <span class="cmt"
-                                        ># Override host and port</span
-                                    >
-                                    <span class="cmd">llm run</span> mlx-lm
-                                    mlx-community/Llama-3.2-3B-Instruct-4bit
-                                    <span class="flag">--host</span> 0.0.0.0
-                                    <span class="flag">--port</span> 8081
-                                    <span class="cmt"
-                                        ># Provider-specific flags are forwarded
-                                        automatically</span
-                                    >
-                                    <span class="cmd">llm run</span> mlx-lm
-                                    mlx-community/Llama-3.2-3B-Instruct-4bit \
-                                    <span class="flag">--port</span> 8080
-                                    <span class="flag">--chat-template</span>
-                                    chatml
-                                    <span class="flag">--max-tokens</span> 2048
-                                    <span class="cmd">llm run</span> vllm-mlx
-                                    mlx-community/Mistral-7B-v0.1-4bit \
-                                    <span class="flag">--port</span> 8080
-                                    <span class="flag">--max-model-len</span>
-                                    4096
-                                    <span class="flag">--dtype</span>
-                                    float16</code
-                                >
-                            </div>
+                        <h4 style="margin: 1.25rem 0 0.5rem">Flags</h4>
+                        <div class="tbl-wrap" style="margin: 0 0 1rem">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Flag</th>
+                                        <th>Default</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>--host</code></td>
+                                        <td><code>127.0.0.1</code></td>
+                                        <td>Bind address for the server</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>--port</code></td>
+                                        <td>provider default</td>
+                                        <td>Port number (overrides the provider default)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>--ctx</code></td>
+                                        <td><code>65000</code></td>
+                                        <td>
+                                            Context window length. Maps to
+                                            <code>--num-ctx</code> (ollama),
+                                            <code>--max-tokens</code> (mlx-lm),
+                                            <code>--max-model-len</code> (vllm-mlx).
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
+
+                          <div class="term">
+                              <button class="copy-btn">Copy</button>
+                              <div class="term-body">
+                                  <code><span class="cmt"># Run the configured default</span>&#10;<span class="cmd">llm run</span>&#10;<span class="cmt"># Run a specific provider + model</span>&#10;<span class="cmd">llm run</span> ollama llama3.2&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># Override host and port</span>&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit <span class="flag">--host</span> 0.0.0.0 <span class="flag">--port</span> 8081&#10;<span class="cmt"># Set a 32k context window</span>&#10;<span class="cmd">llm run</span> ollama llama3.2 <span class="flag">--ctx</span> 32768&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit <span class="flag">--ctx</span> 32768&#10;<span class="cmt"># Provider-specific flags are forwarded automatically</span>&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \&#10;    <span class="flag">--port</span> 8080 <span class="flag">--chat-template</span> chatml&#10;<span class="cmd">llm run</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \&#10;    <span class="flag">--port</span> 8080 <span class="flag">--dtype</span> float16</code></div>
+                          </div>
                     </section>
 
                     <!-- ps -->
@@ -1677,21 +1564,11 @@ A unified CLI and GUI wrapper that gives
                             <code>ollama stop &lt;model&gt;</code> to release
                             GPU memory. No arguments are required.
                         </p>
-                        <div class="term">
-                            <button class="copy-btn">Copy</button>
-                            <div class="term-body">
-                                <code
-                                    ><span class="cmd">llm stop</span>
-                                    <span class="out"
-                                        >Sent SIGTERM to PID 42107.</span
-                                    >
-                                    <span class="out"
-                                        >Stopped mlx-lm:
-                                        mlx-community/Llama-3.2-3B-Instruct-4bit</span
-                                    ></code
-                                >
-                            </div>
-                        </div>
+                          <div class="term">
+                              <button class="copy-btn">Copy</button>
+                              <div class="term-body">
+                                  <code><span class="cmd">llm stop</span>&#10;<span class="out">Sent SIGTERM to PID 42107.</span>&#10;<span class="out">Stopped mlx-lm: mlx-community/Llama-3.2-3B-Instruct-4bit</span></code></div>
+                          </div>
                     </section>
                 </section>
 
@@ -1701,87 +1578,49 @@ A unified CLI and GUI wrapper that gives
                 <section id="examples">
                     <h2>Examples</h2>
 
-                    <h3>First-time setup</h3>
-                    <div class="term">
-                        <button class="copy-btn">Copy</button>
-                        <div class="term-body">
-                            <code
-                                ><span class="cmt"
-                                    ># 1. Check what's installed and what you
-                                    already have</span
-                                >
-                                <span class="cmd">llm provider info</span>
-                                <span class="cmd">llm ls</span>
-                                <span class="cmt"># 2. Download a model</span>
-                                <span class="cmd">llm download</span> ollama
-                                llama3.2
-                                <span class="cmd">llm download</span> mlx-lm
-                                mlx-community/Llama-3.2-3B-Instruct-4bit
-                                <span class="cmt"
-                                    ># 3. Set a default so bare 'llm run' always
-                                    works</span
-                                >
-                                <span class="cmd">llm default</span> mlx-lm
-                                mlx-community/Llama-3.2-3B-Instruct-4bit
-                                <span class="cmd">llm default</span>
-                                <span class="cmt"># confirm</span>
-                                <span class="cmt"># 4. Run it</span>
-                                <span class="cmd">llm run</span>
-                                <span class="cmt"
-                                    ># 5. Check what's running (in another
-                                    terminal)</span
-                                >
-                                <span class="cmd">llm ps</span>
-                                <span class="cmt"># 6. Stop it</span>
-                                <span class="cmd">llm stop</span></code
-                            >
-                        </div>
-                    </div>
+                      <h3>First-time setup</h3>
+                      <div class="term">
+                          <button class="copy-btn">Copy</button>
+                          <div class="term-body">
+                              <code><span class="cmt"># 1. Check what's installed and what you already have</span>&#10;<span class="cmd">llm provider info</span>&#10;<span class="cmd">llm ls</span>&#10;<span class="cmt"># 2. Download a model</span>&#10;<span class="cmd">llm download</span> ollama llama3.2&#10;<span class="cmd">llm download</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># 3. Set a default so bare 'llm run' always works</span>&#10;<span class="cmd">llm default</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmd">llm default</span> <span class="cmt"># confirm</span>&#10;<span class="cmt"># 4. Run it</span>&#10;<span class="cmd">llm run</span>&#10;<span class="cmt"># 5. Check what's running (in another terminal)</span>&#10;<span class="cmd">llm ps</span>&#10;<span class="cmt"># 6. Stop it</span>&#10;<span class="cmd">llm stop</span></code></div>
+                          </div>
+                      </div>
 
-                    <h3>mlx-lm with custom flags</h3>
-                    <div class="term">
-                        <button class="copy-btn">Copy</button>
-                        <div class="term-body">
-                            <code
-                                ><span class="cmd">llm run</span> mlx-lm
-                                mlx-community/Llama-3.2-3B-Instruct-4bit \
-                                <span class="flag">--host</span> 0.0.0.0 \
-                                <span class="flag">--port</span> 8080 \
-                                <span class="flag">--chat-template</span> chatml
-                                \
-                                <span class="flag">--max-tokens</span>
-                                2048</code
-                            >
-                        </div>
-                    </div>
+                      <h3>mlx-lm with custom flags</h3>
+                      <div class="term">
+                          <button class="copy-btn">Copy</button>
+                          <div class="term-body">
+                              <code><span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \&#10;    <span class="flag">--host</span> 0.0.0.0 \&#10;    <span class="flag">--port</span> 8080 \&#10;    <span class="flag">--chat-template</span> chatml \&#10;    <span class="flag">--max-tokens</span> 2048</code></div>
+                          </div>
+                      </div>
 
-                    <h3>vllm-mlx with custom flags</h3>
-                    <div class="term">
-                        <button class="copy-btn">Copy</button>
-                        <div class="term-body">
-                            <code
-                                ><span class="cmd">llm run</span> vllm-mlx
-                                mlx-community/Mistral-7B-v0.1-4bit \
-                                <span class="flag">--host</span> 0.0.0.0 \
-                                <span class="flag">--port</span> 8080 \
-                                <span class="flag">--max-model-len</span> 4096 \
-                                <span class="flag">--dtype</span> float16</code
-                            >
-                        </div>
-                    </div>
+                      <h3>vllm-mlx with custom flags</h3>
+                      <div class="term">
+                          <button class="copy-btn">Copy</button>
+                          <div class="term-body">
+                              <code><span class="cmd">llm run</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \&#10;    <span class="flag">--host</span> 0.0.0.0 \&#10;    <span class="flag">--port</span> 8080 \&#10;    <span class="flag">--max-model-len</span> 4096 \&#10;    <span class="flag">--dtype</span> float16</code></div>
+                          </div>
+                      </div>
 
-                    <h3>ollama on a custom port</h3>
-                    <div class="term">
-                        <button class="copy-btn">Copy</button>
-                        <div class="term-body">
-                            <code
-                                ><span class="cmd">llm run</span> ollama
-                                llama3.2
-                                <span class="flag">--host</span> 0.0.0.0
-                                <span class="flag">--port</span> 11434</code
-                            >
-                        </div>
-                    </div>
+                      <h3>ollama on a custom port</h3>
+                      <div class="term">
+                          <button class="copy-btn">Copy</button>
+                          <div class="term-body">
+                              <code><span class="cmd">llm run</span> ollama llama3.2 <span class="flag">--host</span> 0.0.0.0 <span class="flag">--port</span> 11434</code></div>
+                          </div>
+                      </div>
+
+                      <h3>Context window length</h3>
+                      <p style="color: var(--text-muted); font-size: 0.9rem; margin: 0.25rem 0 0.75rem">
+                          Use <code>--ctx</code> to set the context window. The default is <code>65000</code>.
+                          The flag maps to the correct provider-specific option automatically.
+                      </p>
+                      <div class="term">
+                          <button class="copy-btn">Copy</button>
+                          <div class="term-body">
+                              <code><span class="cmt"># 65 000 token context (default)</span>&#10;<span class="cmd">llm run</span> ollama llama3.2&#10;<span class="cmt"># Reduce to 32k to save memory</span>&#10;<span class="cmd">llm run</span> ollama llama3.2 <span class="flag">--ctx</span> 32768&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit <span class="flag">--ctx</span> 32768&#10;<span class="cmd">llm run</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit <span class="flag">--ctx</span> 32768</code></div>
+                          </div>
+                      </div>
                 </section>
 
                 <div class="grad-line"></div>
@@ -2073,40 +1912,12 @@ A unified CLI and GUI wrapper that gives
                         bundled one.
                        </p>
 
-                    <div class="term">
-                        <button class="copy-btn">Copy</button>
-                        <div class="term-body">
-                            <code
-                                ><span class="cmd">pixi run build</span>
-                                <span class="out"
-                                    >--- PyInstaller build ---</span
-                                >
-                                <span class="out">...</span>
-                                <span class="out">--- Creating DMG ---</span>
-                                <span class="out">...</span>
-                                <span class="hl">Build complete.</span>
-                                <span class="out">
-                                    App bundle dist/llm.app</span
-                                >
-                                <span class="out"> DMG dist/llm.dmg</span>
-                                <span class="out"
-                                    >To use from Terminal without
-                                    installing:</span
-                                >
-                                <span class="flag">
-                                    dist/llm.app/Contents/MacOS/llm --help</span
-                                >
-                                <span class="out"
-                                    >To install system-wide (add to ~/.zshrc or
-                                    ~/.bashrc):</span
-                                >
-                                <span class="flag">
-                                    export
-                                    PATH="dist/llm.app/Contents/MacOS:$PATH"</span
-                                ></code
-                            >
-                        </div>
-                    </div>
+                      <div class="term">
+                          <button class="copy-btn">Copy</button>
+                          <div class="term-body">
+                              <code><span class="cmd">pixi run build</span>&#10;<span class="out">--- PyInstaller build ---</span>&#10;<span class="out">...</span>&#10;<span class="out">--- Creating DMG ---</span>&#10;<span class="out">...</span>&#10;<span class="hl">Build complete.</span>&#10;<span class="out">  App bundle  dist/llm.app</span>&#10;<span class="out">  DMG         dist/llm.dmg</span>&#10;<span class="out">  Double-click llm.app to launch the dashboard</span></code></div>
+                          </div>
+                      </div>
                 </section>
             </main>
         </div>
