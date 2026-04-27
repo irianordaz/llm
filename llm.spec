@@ -47,7 +47,7 @@ coll = COLLECT(
 app = BUNDLE(
      coll,
      name='llm.app',
-     icon=None,
+     icon='docs/assets/llm.icns',
      bundle_identifier='com.llmwrapper.llm',
      version='1.0.0',
      info_plist={

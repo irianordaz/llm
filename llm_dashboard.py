@@ -225,27 +225,25 @@ class StatusBanner(wx.Panel):
 
         if alive:
             self.dot.SetForegroundColour(SUCCESS)
-            self.title.SetLabel(f'{provider}    ·   {model}')
+            self.title.SetLabel(f'{provider}    ·    {model}')
+            parts = [base_url, f'{host}:{port}']
             if pid is not None:
-                self.detail.SetLabel(
-                    f'{base_url}    ·    {host}:{port}    ·    PID {pid}    ·    '
-                    f'started {state.get("started_at", "?")}'
-                )
-            else:
-                self.detail.SetLabel(
-                    f'{base_url}    ·    {host}:{port}    ·    (external, auto-detected)'
-                )
+                parts.append(f'PID {pid}')
+            started = state.get('started_at', '')
+            if started:
+                parts.append(f'started {started}')
+            self.detail.SetLabel('    ·    '.join(parts))
         else:
             self.dot.SetForegroundColour(WARN)
-            self.title.SetLabel(f'{provider}    ·   {model}    (not responding)')
-            self.detail.SetLabel(f'PID {pid} no longer alive — clearing state…')
+            self.title.SetLabel(f'{provider}    ·    {model}    (not responding)')
+            self.detail.SetLabel(f'PID {pid} — process no longer alive, clearing state…')
 
         param_parts = []
         if ctx is not None:
-            param_parts.append(f'ctx={ctx}')
+            param_parts.append(f'ctx = {ctx}')
         for k, v in params.items():
             if v is not None:
-                param_parts.append(f'{k}={v}')
+                param_parts.append(f'{k} = {v}')
         if param_parts:
             self.params_detail.SetLabel('    '.join(param_parts))
             self.params_detail.Show()
@@ -262,6 +260,71 @@ class StatusBanner(wx.Panel):
         if frame:
             frame.Layout()
             frame.Refresh()
+
+
+# ---------------------------------------------------------------------------
+# Download progress frame  (non-modal — real wx.Frame, not a dialog)
+# ---------------------------------------------------------------------------
+
+
+class _DownloadProgress(wx.Frame):
+    """Floating progress window that never blocks the main frame."""
+
+    def __init__(self, model: str, on_cancel):
+        super().__init__(
+            None,   # top-level: no parent so macOS can't make it a sheet
+            title=f'Downloading {model}',
+            size=(500, 130),
+            style=(
+                wx.DEFAULT_FRAME_STYLE
+                & ~(wx.RESIZE_BORDER | wx.MAXIMIZE_BOX | wx.MINIMIZE_BOX)
+            ),
+        )
+        self.SetBackgroundColour(CARD)
+        self._on_cancel_cb = on_cancel
+        self._dismissing = False
+
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        self._label = _label(self, 'Connecting…', size=11)
+        sizer.Add(self._label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 16)
+
+        self._gauge = wx.Gauge(self, range=100)
+        sizer.Add(self._gauge, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 12)
+
+        btn_row = wx.BoxSizer(wx.HORIZONTAL)
+        btn_row.AddStretchSpacer()
+        cancel_btn = wx.Button(self, label='Cancel')
+        cancel_btn.Bind(wx.EVT_BUTTON, lambda e: self._cancel())
+        btn_row.Add(cancel_btn, 0, wx.RIGHT, 12)
+        sizer.Add(btn_row, 0, wx.TOP | wx.BOTTOM, 8)
+
+        self.SetSizer(sizer)
+        self.Bind(wx.EVT_CLOSE, self._on_close_evt)
+        self.Centre()
+        self.Show()
+
+    def _cancel(self):
+        self._on_cancel_cb()
+
+    def _on_close_evt(self, event):
+        if not self._dismissing:
+            self._on_cancel_cb()
+        event.Skip()
+
+    def update(self, pct: int, label: str) -> None:
+        try:
+            self._gauge.SetValue(pct)
+            self._label.SetLabel(label)
+        except Exception:
+            pass
+
+    def dismiss(self) -> None:
+        self._dismissing = True
+        try:
+            self.Destroy()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -287,9 +350,17 @@ class ModelsTab(wx.Panel):
             wx.ALIGN_CENTER_VERTICAL,
         )
 
-        download_btn = wx.Button(self, label='Download…')
+        self.run_btn = wx.Button(self, label='Run selected')
+        self.run_btn.Bind(wx.EVT_BUTTON, self._on_run_clicked)
+        tb.Add(self.run_btn, 0, wx.RIGHT, 6)
+
+        download_btn = wx.Button(self, label='Download')
         download_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_download())
         tb.Add(download_btn, 0, wx.RIGHT, 6)
+
+        self.delete_btn = wx.Button(self, label='Delete')
+        self.delete_btn.Bind(wx.EVT_BUTTON, self._on_delete_clicked)
+        tb.Add(self.delete_btn, 0, wx.RIGHT, 6)
 
         refresh_btn = wx.Button(self, label='Refresh')
         refresh_btn.Bind(wx.EVT_BUTTON, lambda e: self.refresh())
@@ -306,18 +377,8 @@ class ModelsTab(wx.Panel):
         self.list.AppendColumn('Source', width=140)
         self.list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self._on_double)
         self.list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self._on_right_click)
-        sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 14)
+        sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 14)
 
-        actions = wx.BoxSizer(wx.HORIZONTAL)
-        self.run_btn = wx.Button(self, label='Run selected')
-        self.run_btn.Bind(wx.EVT_BUTTON, self._on_run_clicked)
-        actions.Add(self.run_btn, 0, wx.RIGHT, 8)
-
-        self.delete_btn = wx.Button(self, label='Delete')
-        self.delete_btn.Bind(wx.EVT_BUTTON, self._on_delete_clicked)
-        actions.Add(self.delete_btn, 0)
-
-        sizer.Add(actions, 0, wx.EXPAND | wx.ALL, 14)
         self.SetSizer(sizer)
         self.refresh()
 
@@ -1048,14 +1109,8 @@ class LlmFrame(wx.Frame):
             'error': None,
         }
 
-        # No PD_APP_MODAL: main window stays interactive while downloading.
-        progress = wx.ProgressDialog(
-            f'Downloading {model}',
-            'Connecting…',
-            maximum=100,
-            parent=self,
-            style=wx.PD_CAN_ABORT | wx.PD_ELAPSED_TIME,
-        )
+        # Real wx.Frame — genuinely non-blocking on all platforms.
+        progress = _DownloadProgress(model, on_cancel=lambda: state.update({'aborted': True}))
 
         def _process_line(line: str, is_ollama: bool) -> None:
             clean = _ANSI.sub('', line).strip()
@@ -1144,10 +1199,7 @@ class LlmFrame(wx.Frame):
                 _closed[0] = True
                 _dl_timer.Stop()
                 self.Unbind(wx.EVT_TIMER, source=_dl_timer)
-                try:
-                    progress.Destroy()
-                except Exception:
-                    pass
+                progress.dismiss()
                 if state['aborted']:
                     self.SetStatusText('Download cancelled.')
                 elif state['success']:
@@ -1156,12 +1208,7 @@ class LlmFrame(wx.Frame):
                 elif state['error']:
                     wx.MessageBox(state['error'], 'Download failed', wx.OK | wx.ICON_ERROR)
                 return
-            try:
-                keep_going, _ = progress.Update(state['pct'], state['label'])
-                if not keep_going:
-                    state['aborted'] = True
-            except Exception:
-                pass
+            progress.update(state['pct'], state['label'])
 
         self.Bind(wx.EVT_TIMER, _tick, _dl_timer)
         _dl_timer.Start(150)
