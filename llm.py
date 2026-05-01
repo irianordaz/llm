@@ -232,6 +232,7 @@ def get_ollama_models() -> list[str]:
             capture_output=True,
             text=True,
             check=True,
+            timeout=5,
         )
         lines = result.stdout.strip().splitlines()
         models = []
@@ -243,7 +244,7 @@ def get_ollama_models() -> list[str]:
     except FileNotFoundError:
         print('Warning: ollama not found, skipping.', file=sys.stderr)
         return []
-    except subprocess.CalledProcessError as err:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as err:
         print(f'Warning: ollama ls failed: {err}', file=sys.stderr)
         return []
 

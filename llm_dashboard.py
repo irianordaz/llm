@@ -33,65 +33,20 @@ import llm   # noqa: E402
 # Theme
 # ---------------------------------------------------------------------------
 
-LIGHT = 'light'
-DARK = 'dark'
-
-_THEMES = {
-    LIGHT: {
-        'bg': wx.Colour(244, 244, 250),
-        'card': wx.Colour(255, 255, 255),
-        'accent': wx.Colour(124, 58, 237),
-        'text': wx.Colour(26, 26, 48),
-        'text_muted': wx.Colour(104, 104, 160),
-        'success': wx.Colour(5, 150, 105),
-        'warn': wx.Colour(217, 119, 6),
-        'dot_idle': wx.Colour(180, 180, 200),
-    },
-    DARK: {
-        'bg': wx.Colour(30, 30, 46),
-        'card': wx.Colour(42, 42, 58),
-        'accent': wx.Colour(160, 100, 255),
-        'text': wx.Colour(220, 220, 240),
-        'text_muted': wx.Colour(140, 140, 170),
-        'success': wx.Colour(80, 200, 120),
-        'warn': wx.Colour(240, 160, 60),
-        'dot_idle': wx.Colour(100, 100, 130),
-    },
+_PALETTE = {
+    'bg': wx.Colour(244, 244, 250),
+    'card': wx.Colour(255, 255, 255),
+    'accent': wx.Colour(124, 58, 237),
+    'text': wx.Colour(26, 26, 48),
+    'text_muted': wx.Colour(104, 104, 160),
+    'success': wx.Colour(5, 150, 105),
+    'warn': wx.Colour(217, 119, 6),
+    'dot_idle': wx.Colour(180, 180, 200),
 }
 
 
 def tc(key: str, theme: str | None = None) -> wx.Colour:
-    """Return a colour for *key* in *theme* (defaults to current theme)."""
-    t = theme if theme else _THEME.mode
-    return _THEMES[t][key]
-
-
-class _Theme:
-    """Shared theme state for the dashboard."""
-
-    def __init__(self):
-        self._mode: str = LIGHT
-        self._callbacks: list[callable] = []
-
-    @property
-    def mode(self) -> str:
-        return self._mode
-
-    def set_mode(self, mode: str) -> None:
-        if self._mode == mode:
-            return
-        self._mode = mode
-        for cb in self._callbacks:
-            cb(mode)
-
-    def toggle(self) -> None:
-        self.set_mode(DARK if self._mode == LIGHT else LIGHT)
-
-    def on_change(self, cb: callable) -> None:
-        self._callbacks.append(cb)
-
-
-_THEME = _Theme()
+    return _PALETTE[key]
 
 POLL_MS = 2000
 
@@ -107,11 +62,6 @@ def _font(
     family = wx.FONTFAMILY_TELETYPE if mono else wx.FONTFAMILY_DEFAULT
     weight = wx.FONTWEIGHT_BOLD if bold else wx.FONTWEIGHT_NORMAL
     return wx.Font(size, family, wx.FONTSTYLE_NORMAL, weight)
-
-
-def _get_current_theme() -> str:
-    """Return the current theme mode string."""
-    return _THEME.mode
 
 
 def _label(
@@ -132,16 +82,10 @@ def _label(
     return lbl
 
 
-def _apply_theme_to_all() -> None:
-    """Re-apply the current theme to all panels, notebooks, and children."""
-    for window in wx.GetTopLevelWindows():
-        if isinstance(window, wx.Frame):
-            window.SetBackgroundColour(tc('bg'))
-            for child in window.GetChildren():
-                if isinstance(child, wx.Panel):
-                    child.SetBackgroundColour(tc('bg'))
-                elif isinstance(child, wx.Notebook):
-                    child.SetBackgroundColour(tc('bg'))
+def _style_input(ctrl: wx.Window) -> None:
+    """Apply theme background + foreground to a TextCtrl, Choice, or ListCtrl."""
+    ctrl.SetBackgroundColour(tc('card'))
+    ctrl.SetForegroundColour(tc('text'))
 
 
 # ---------------------------------------------------------------------------
@@ -272,9 +216,8 @@ class StatusBanner(wx.Panel):
         self.SetSizer(sizer)
 
     def update_status(self, state):
-        theme = _THEME.mode
         if not state:
-            self.dot.SetForegroundColour(tc('dot_idle', theme))
+            self.dot.SetForegroundColour(tc('dot_idle'))
             self.title.SetLabel('No model running')
             self.detail.SetLabel(
                 'Use the Models tab to start one.',
@@ -317,13 +260,13 @@ class StatusBanner(wx.Panel):
 
         if alive:
             self.dot.SetForegroundColour(
-                tc('success', theme),
+                tc('success'),
             )
             self.title.SetLabel(dot_text)
             self.detail.SetLabel(part_text)
         else:
             self.dot.SetForegroundColour(
-                tc('warn', theme),
+                tc('warn'),
             )
             self.title.SetLabel(
                 f'{dot_text}  (not responding)',
@@ -380,14 +323,11 @@ class _DownloadProgress(wx.Frame):
         )
         self._on_cancel_cb = on_cancel
         self._dismissing = False
-        self._apply_theme()
+        self.SetBackgroundColour(tc('card'))
         self._build_ui()
         self.Bind(wx.EVT_CLOSE, self._on_close_evt)
         self.Centre()
         self.Show()
-
-    def _apply_theme(self):
-        self.SetBackgroundColour(tc('card'))
 
     def _build_ui(self):
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -454,11 +394,8 @@ class ModelsTab(wx.Panel):
         self._build_ui()
         self.refresh()
 
-    def _apply_theme(self):
-        self.SetBackgroundColour(tc('bg'))
-
     def _build_ui(self):
-        self._apply_theme()
+        self.SetBackgroundColour(tc('bg'))
         sizer = wx.BoxSizer(wx.VERTICAL)
 
         tb = wx.BoxSizer(wx.HORIZONTAL)
@@ -493,7 +430,7 @@ class ModelsTab(wx.Panel):
             | wx.LC_SINGLE_SEL
             | wx.BORDER_NONE,
         )
-        self.list.SetBackgroundColour(tc('card'))
+        _style_input(self.list)
         self.list.AppendColumn('Provider', width=160)
         self.list.AppendColumn('Model', width=420)
         self.list.AppendColumn('Source', width=140)
@@ -513,11 +450,7 @@ class ModelsTab(wx.Panel):
         self.SetSizer(sizer)
 
     def apply_theme(self):
-        """Re-apply the current theme to all child cards."""
-        self._apply_theme()
-        for card in self.list.GetChildren():
-            if isinstance(card, wx.Window):
-                card.SetBackgroundColour(tc('card'))
+        pass
 
     def refresh(self):
         self.list.DeleteAllItems()
@@ -634,9 +567,7 @@ class ProvidersTab(scrolled.ScrolledPanel):
         self.SetSizer(sizer)
 
     def apply_theme(self):
-        for card in self.GetChildren():
-            if isinstance(card, wx.Panel):
-                card.SetBackgroundColour(tc('card'))
+        pass
 
     def refresh(self):
         self.cards_sizer.Clear(True)
@@ -763,6 +694,7 @@ class RunDialog(wx.Dialog):
             self,
             choices=llm.PROVIDERS,
         )
+        _style_input(self.provider)
         grid.Add(self.provider, 0, wx.EXPAND)
         grid.Add(
             _label(self, 'Model',
@@ -770,6 +702,7 @@ class RunDialog(wx.Dialog):
             0, wx.ALIGN_CENTER_VERTICAL,
         )
         self.model = wx.TextCtrl(self)
+        _style_input(self.model)
         grid.Add(self.model, 0, wx.EXPAND)
         grid.Add(
             _label(self, 'Host',
@@ -777,6 +710,7 @@ class RunDialog(wx.Dialog):
             0, wx.ALIGN_CENTER_VERTICAL,
         )
         self.host = wx.TextCtrl(self)
+        _style_input(self.host)
         grid.Add(self.host, 0, wx.EXPAND)
         grid.Add(
             _label(self, 'Port',
@@ -784,6 +718,7 @@ class RunDialog(wx.Dialog):
             0, wx.ALIGN_CENTER_VERTICAL,
         )
         self.port = wx.TextCtrl(self)
+        _style_input(self.port)
         grid.Add(self.port, 0, wx.EXPAND)
         grid.Add(
             _label(self,
@@ -792,6 +727,7 @@ class RunDialog(wx.Dialog):
             0, wx.ALIGN_CENTER_VERTICAL,
         )
         self.ctx = wx.TextCtrl(self)
+        _style_input(self.ctx)
         grid.Add(self.ctx, 0, wx.EXPAND)
         sizer.Add(grid, 0,
                    wx.EXPAND | wx.ALL, 18)
@@ -836,6 +772,7 @@ class RunDialog(wx.Dialog):
                 wx.ALIGN_CENTER_VERTICAL,
             )
             field = wx.TextCtrl(self)
+            _style_input(field)
             field.SetHint('default')
             self._param_fields[pname] = field
             params_grid.Add(
@@ -980,6 +917,7 @@ class DownloadDialog(wx.Dialog):
             self,
             choices=llm.PROVIDERS,
         )
+        _style_input(self.provider)
         self.provider.SetSelection(0)
         prov_row.Add(self.provider, 0)
         sizer.Add(prov_row, 0,
@@ -1006,6 +944,7 @@ class DownloadDialog(wx.Dialog):
             ollama_panel,
             size=(320, -1),
         )
+        _style_input(self.ollama_model)
         self.ollama_model.SetHint(
             'e.g. llama3.2',
         )
@@ -1036,6 +975,7 @@ class DownloadDialog(wx.Dialog):
             size=(200, -1),
             style=wx.TE_PROCESS_ENTER,
         )
+        _style_input(self.hf_query)
         self.hf_query.Bind(
             wx.EVT_TEXT_ENTER,
             self._on_search,
@@ -1053,6 +993,7 @@ class DownloadDialog(wx.Dialog):
             hf_panel,
             size=(100, -1),
         )
+        _style_input(self.hf_filter)
         self.hf_filter.SetHint('e.g. mlx')
         search_row.Add(self.hf_filter,
                          0, wx.RIGHT, 8)
@@ -1073,6 +1014,7 @@ class DownloadDialog(wx.Dialog):
             | wx.LC_SINGLE_SEL
             | wx.BORDER_SIMPLE,
         )
+        _style_input(self.hf_list)
         self.hf_list.AppendColumn(
             'Model',
             width=270,
@@ -1111,6 +1053,7 @@ class DownloadDialog(wx.Dialog):
             hf_panel,
             size=(280, -1),
         )
+        _style_input(self.hf_model)
         self.hf_model.SetHint(
             'org/model-name or select above',
         )
@@ -1318,7 +1261,9 @@ class LlmFrame(wx.Frame):
             self._on_close,
         )
         self._build_ui()
-        self._apply_theme_to_ui()
+        _icon_path = _HERE / 'docs' / 'assets' / 'llm-512x512.png'
+        if _icon_path.exists():
+            self.SetIcon(wx.Icon(str(_icon_path), wx.BITMAP_TYPE_PNG))
         self.CreateStatusBar()
         self.SetStatusText('Ready')
         self.SetAcceleratorTable(
@@ -1361,7 +1306,7 @@ class LlmFrame(wx.Frame):
         """Construct the widget tree (called once in __init__)."""
         root = wx.BoxSizer(wx.VERTICAL)
 
-        # --- Header with theme toggle button ---
+        # --- Header ---
         header = wx.Panel(self)
         header.SetBackgroundColour(tc('bg'))
         h = wx.BoxSizer(wx.HORIZONTAL)
@@ -1388,25 +1333,6 @@ class LlmFrame(wx.Frame):
         )
         h.Add(tag, 0,
               wx.ALIGN_CENTER_VERTICAL)
-
-        h.AddStretchSpacer()
-
-        # Theme toggle button (right of title)
-        self._theme_btn = wx.Button(
-            header,
-            label='\u263E\uFE0F',  # half-moon for dark
-            size=(38, 30),
-        )
-        self._theme_btn.SetToolTip(
-            'Toggle light/dark theme',
-        )
-        self._theme_btn.Bind(
-            wx.EVT_BUTTON,
-            self._on_toggle_theme,
-        )
-        h.Add(self._theme_btn, 0,
-              wx.ALIGN_CENTER_VERTICAL
-              | wx.LEFT, 10)
 
         header.SetSizer(h)
         root.Add(
@@ -1459,67 +1385,6 @@ class LlmFrame(wx.Frame):
             wx.EXPAND | wx.ALL, 16,
         )
         self.SetSizer(root)
-
-    def _update_theme_button_label(self):
-        """Refresh the theme button icon for the current mode."""
-        if _THEME.mode == DARK:
-            self._theme_btn.SetLabel('\u2600\uFE0F')  # sun
-        else:
-            self._theme_btn.SetLabel('\u263E\uFE0F')  # moon
-
-    def _on_toggle_theme(self, event):
-        """Switch between light and dark themes."""
-        _THEME.toggle()
-        self._apply_theme_to_ui()
-
-    def _apply_theme_to_ui(self):
-        """Apply the current light/dark theme to all dashboard UI."""
-        theme = _THEME.mode
-
-        # Main frame background
-        self.SetBackgroundColour(tc('bg', theme))
-
-        # Header panel
-        for child in self.GetChildren():
-            if isinstance(child, wx.Panel):
-                if child == self._get_header_panel():
-                    child.SetBackgroundColour(
-                        tc('bg', theme),
-                    )
-                    break
-        if self._get_header_panel():
-            self._get_header_panel().SetBackgroundColour(
-                tc('bg', theme),
-            )
-
-        # Notebook background
-        self.notebook.SetBackgroundColour(
-            tc('bg', theme),
-        )
-
-        # Apply theme to all tabs (panels + notebook pages)
-        self.models_tab.apply_theme()
-        self.providers_tab.apply_theme()
-
-        # Apply to notebook page windows
-        for i in range(self.notebook.GetPageCount()):
-            page = self.notebook.GetPage(i)
-            if hasattr(page, 'SetBackgroundColour'):
-                page.SetBackgroundColour(
-                    tc('bg', theme),
-                )
-
-        # Update theme button icon
-        self._update_theme_button_label()
-        self.Layout()
-
-    def _get_header_panel(self):
-        """Return the header wx.Panel for theme application."""
-        for child in self.GetChildren():
-            # Try to find it by checking title text or position
-            # The header is the first child panel
-            return child
-        return None
 
     def refresh_status(self):
         live = llm.discover_running_models()
@@ -1832,20 +1697,23 @@ class LlmFrame(wx.Frame):
         if not confirmed:
             return
 
-        success, msg = (
-            llm.delete_model(
-                provider, model,
+        try:
+            success, msg = llm.delete_model(provider, model)
+        except Exception as exc:
+            wx.MessageBox(
+                str(exc),
+                'Delete failed',
+                wx.OK | wx.ICON_ERROR,
             )
-        )
+            return
         if success:
-            self.SetStatusText(msg)
             self.models_tab.refresh()
+            self.SetStatusText(msg)
         else:
             wx.MessageBox(
                 msg,
                 'Delete failed',
-                wx.OK
-                | wx.ICON_ERROR,
+                wx.OK | wx.ICON_ERROR,
             )
 
     def on_stop(self):

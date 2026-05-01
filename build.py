@@ -14,6 +14,37 @@ APP_NAME = 'llm.app'
 DMG_NAME = 'llm.dmg'
 SPEC_FILE = 'llm.spec'
 _TMP_DMG_STAGING = Path('/tmp/llm_dmg_staging')
+_ICON_PNG = Path('docs/assets/llm-512x512.png')
+_ICON_ICNS = Path('docs/assets/llm-512x512.icns')
+_TMP_ICONSET = Path('/tmp/llm_icon.iconset')
+
+
+def make_icns() -> None:
+    print('--- Generating icns from PNG ---')
+    if _TMP_ICONSET.exists():
+        shutil.rmtree(_TMP_ICONSET)
+    _TMP_ICONSET.mkdir(parents=True)
+    sizes = [16, 32, 64, 128, 256, 512]
+    for size in sizes:
+        out = _TMP_ICONSET / f'icon_{size}x{size}.png'
+        subprocess.run(
+            ['sips', '-z', str(size), str(size), str(_ICON_PNG), '--out', str(out)],
+            check=True,
+            capture_output=True,
+        )
+        out2x = _TMP_ICONSET / f'icon_{size}x{size}@2x.png'
+        size2x = min(size * 2, 512)
+        subprocess.run(
+            ['sips', '-z', str(size2x), str(size2x), str(_ICON_PNG), '--out', str(out2x)],
+            check=True,
+            capture_output=True,
+        )
+    subprocess.run(
+        ['iconutil', '-c', 'icns', str(_TMP_ICONSET), '-o', str(_ICON_ICNS)],
+        check=True,
+    )
+    shutil.rmtree(_TMP_ICONSET)
+    print(f'  Written: {_ICON_ICNS}')
 
 
 def check_platform() -> None:
@@ -99,6 +130,7 @@ def print_summary() -> None:
 
 def main() -> None:
     check_platform()
+    make_icns()
     run_pyinstaller()
     create_dmg()
     print_summary()
