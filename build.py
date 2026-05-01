@@ -28,14 +28,30 @@ def make_icns() -> None:
     for size in sizes:
         out = _TMP_ICONSET / f'icon_{size}x{size}.png'
         subprocess.run(
-            ['sips', '-z', str(size), str(size), str(_ICON_PNG), '--out', str(out)],
+            [
+                'sips',
+                '-z',
+                str(size),
+                str(size),
+                str(_ICON_PNG),
+                '--out',
+                str(out),
+            ],
             check=True,
             capture_output=True,
         )
         out2x = _TMP_ICONSET / f'icon_{size}x{size}@2x.png'
         size2x = min(size * 2, 512)
         subprocess.run(
-            ['sips', '-z', str(size2x), str(size2x), str(_ICON_PNG), '--out', str(out2x)],
+            [
+                'sips',
+                '-z',
+                str(size2x),
+                str(size2x),
+                str(_ICON_PNG),
+                '--out',
+                str(out2x),
+            ],
             check=True,
             capture_output=True,
         )

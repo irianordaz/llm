@@ -40,7 +40,12 @@ OLLAMA_MODEL_DIR = Path.home() / '.ollama' / 'models'
 DEFAULT_CTX = 65000
 
 MODEL_PARAMS = [
-    'temperature', 'top_p', 'top_k', 'min_p', 'repeat_penalty', 'presence_penalty',
+    'temperature',
+    'top_p',
+    'top_k',
+    'min_p',
+    'repeat_penalty',
+    'presence_penalty',
 ]
 
 MLX_LM_PARAM_FLAGS: dict[str, str | None] = {
@@ -428,7 +433,9 @@ def get_ollama_model_params(model: str) -> dict[str, float]:
     try:
         result = subprocess.run(
             ['ollama', 'show', '--modelfile', model],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0:
             return {}
@@ -461,7 +468,10 @@ def _get_ollama_custom_model(base_model: str, params: dict) -> str:
     try:
         subprocess.run(
             ['ollama', 'create', custom_name, '-f', '-'],
-            input=modelfile, capture_output=True, text=True, timeout=30,
+            input=modelfile,
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
     except Exception:
         return base_model
@@ -483,9 +493,13 @@ def search_huggingface_models(
     ]
     for tag in [t.strip() for t in filter_tags.split(',') if t.strip()]:
         params_list.append(('filter', tag))
-    url = 'https://huggingface.co/api/models?' + urllib.parse.urlencode(params_list)
+    url = 'https://huggingface.co/api/models?' + urllib.parse.urlencode(
+        params_list
+    )
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'llm-wrapper/1.0'})
+        req = urllib.request.Request(
+            url, headers={'User-Agent': 'llm-wrapper/1.0'}
+        )
         resp = urllib.request.urlopen(req, timeout=30)
         data = json.loads(resp.read())
         results = []
@@ -500,12 +514,14 @@ def search_huggingface_models(
             # top-level fallback if siblings have no size info
             if not size_bytes:
                 size_bytes = m.get('usedStorage') or 0
-            results.append({
-                'id': m.get('modelId', m.get('id', '')),
-                'downloads': m.get('downloads', 0),
-                'likes': m.get('likes', 0),
-                'size_bytes': size_bytes,
-            })
+            results.append(
+                {
+                    'id': m.get('modelId', m.get('id', '')),
+                    'downloads': m.get('downloads', 0),
+                    'likes': m.get('likes', 0),
+                    'size_bytes': size_bytes,
+                }
+            )
         return results
     except Exception:
         return []
@@ -581,25 +597,54 @@ def _build_run_cmd(
         path = _get_provider_path('mlx-lm')
         ctx_flags = ['--max-tokens', str(ctx)] if ctx is not None else []
         if path and Path(path).is_file():
-            cmd = [path, 'server', '--model', model, '--host', host, '--port', str(port)]
+            cmd = [
+                path,
+                'server',
+                '--model',
+                model,
+                '--host',
+                host,
+                '--port',
+                str(port),
+            ]
         else:
             cmd = [
-                _python_executable(), '-m', 'mlx_lm.server',
-                '--model', model, '--host', host, '--port', str(port),
+                _python_executable(),
+                '-m',
+                'mlx_lm.server',
+                '--model',
+                model,
+                '--host',
+                host,
+                '--port',
+                str(port),
             ]
-        return cmd + ctx_flags + _param_flags(MLX_LM_PARAM_FLAGS) + passthrough, None
+        return cmd + ctx_flags + _param_flags(
+            MLX_LM_PARAM_FLAGS
+        ) + passthrough, None
 
     if provider == 'vllm-mlx':
         path = _get_provider_path('vllm-mlx')
         ctx_flags = ['--max-model-len', str(ctx)] if ctx is not None else []
         if path and _is_pixi_env(path):
             cmd = [
-                _pixi_executable(), 'run', 'vllm-mlx', 'serve', model,
-                '--host', host, '--port', str(port),
+                _pixi_executable(),
+                'run',
+                'vllm-mlx',
+                'serve',
+                model,
+                '--host',
+                host,
+                '--port',
+                str(port),
             ]
-            return cmd + ctx_flags + _param_flags(VLLM_MLX_PARAM_FLAGS) + passthrough, path
+            return cmd + ctx_flags + _param_flags(
+                VLLM_MLX_PARAM_FLAGS
+            ) + passthrough, path
         cmd = ['vllm', 'serve', model, '--host', host, '--port', str(port)]
-        return cmd + ctx_flags + _param_flags(VLLM_MLX_PARAM_FLAGS) + passthrough, None
+        return cmd + ctx_flags + _param_flags(
+            VLLM_MLX_PARAM_FLAGS
+        ) + passthrough, None
 
     print(f'Unknown provider: {provider}', file=sys.stderr)
     sys.exit(1)
@@ -640,7 +685,12 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
             model = _get_ollama_custom_model(model, params)
 
     cmd, cwd = _build_run_cmd(
-        provider, model, host, port, passthrough, ctx,
+        provider,
+        model,
+        host,
+        port,
+        passthrough,
+        ctx,
         params if provider != 'ollama' else None,
     )
     print(f'Starting {provider}: {model}  ({host}:{port})')
@@ -710,7 +760,9 @@ def cmd_stop(args: argparse.Namespace, _: list[str]) -> None:
         o_path = _get_provider_path('ollama')
         binary = o_path if o_path and Path(o_path).is_file() else 'ollama'
         try:
-            subprocess.run([binary, 'stop', model], check=True, capture_output=True)
+            subprocess.run(
+                [binary, 'stop', model], check=True, capture_output=True
+            )
             print(f'Unloaded ollama model: {model}')
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
@@ -775,7 +827,9 @@ def cmd_download(args: argparse.Namespace, _: list[str]) -> None:
         missing_hint = 'Install ollama from https://ollama.com'
     else:
         cmd = _hf_download_cmd(model)
-        missing_hint = 'Install the HuggingFace CLI with: brew install huggingface-cli'
+        missing_hint = (
+            'Install the HuggingFace CLI with: brew install huggingface-cli'
+        )
 
     print(f'Downloading {model} via {provider}...')
     try:
@@ -826,14 +880,16 @@ def _provider_executable(provider: str) -> tuple[str, bool]:
 def get_model_settings(provider: str, model: str) -> dict:
     """Return saved host/port for a model, or empty dict if none saved."""
     config = read_config()
-    return (
-        config.get('model_settings', {}).get(provider, {}).get(model, {})
-    )
+    return config.get('model_settings', {}).get(provider, {}).get(model, {})
 
 
 def save_model_settings(
-    provider: str, model: str, host: str, port: int,
-    ctx: int | None = None, params: dict | None = None,
+    provider: str,
+    model: str,
+    host: str,
+    port: int,
+    ctx: int | None = None,
+    params: dict | None = None,
 ) -> None:
     """Persist host/port/ctx/params for a model so future runs reuse them."""
     config = read_config()
@@ -845,8 +901,7 @@ def save_model_settings(
     if params:
         settings['params'] = params
     (
-        config.setdefault('model_settings', {})
-              .setdefault(provider, {})[model]
+        config.setdefault('model_settings', {}).setdefault(provider, {})[model]
     ) = settings
     write_config(config)
 
@@ -1048,27 +1103,50 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run_parser.add_argument(
-        '--temperature', type=float, default=None, metavar='N',
+        '--temperature',
+        type=float,
+        default=None,
+        metavar='N',
         help='Sampling temperature.',
     )
     run_parser.add_argument(
-        '--top-p', dest='top_p', type=float, default=None, metavar='N',
+        '--top-p',
+        dest='top_p',
+        type=float,
+        default=None,
+        metavar='N',
         help='Top-p (nucleus) sampling.',
     )
     run_parser.add_argument(
-        '--top-k', dest='top_k', type=int, default=None, metavar='N',
+        '--top-k',
+        dest='top_k',
+        type=int,
+        default=None,
+        metavar='N',
         help='Top-k sampling.',
     )
     run_parser.add_argument(
-        '--min-p', dest='min_p', type=float, default=None, metavar='N',
+        '--min-p',
+        dest='min_p',
+        type=float,
+        default=None,
+        metavar='N',
         help='Min-p sampling.',
     )
     run_parser.add_argument(
-        '--repeat-penalty', dest='repeat_penalty', type=float, default=None, metavar='N',
+        '--repeat-penalty',
+        dest='repeat_penalty',
+        type=float,
+        default=None,
+        metavar='N',
         help='Repetition penalty.',
     )
     run_parser.add_argument(
-        '--presence-penalty', dest='presence_penalty', type=float, default=None, metavar='N',
+        '--presence-penalty',
+        dest='presence_penalty',
+        type=float,
+        default=None,
+        metavar='N',
         help='Presence penalty.',
     )
     run_parser.set_defaults(func=cmd_run)
