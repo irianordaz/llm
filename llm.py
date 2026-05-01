@@ -527,6 +527,16 @@ def _format_bytes(n: int) -> str:
     return f'{n:.1f} PB'
 
 
+def _pixi_executable() -> str:
+    found = shutil.which('pixi')
+    if found:
+        return found
+    default = Path.home() / '.pixi' / 'bin' / 'pixi'
+    if default.is_file():
+        return str(default)
+    return 'pixi'
+
+
 def _python_executable() -> str:
     if getattr(sys, 'frozen', False):
         python3 = shutil.which('python3')
@@ -583,7 +593,7 @@ def _build_run_cmd(
         ctx_flags = ['--max-model-len', str(ctx)] if ctx is not None else []
         if path and _is_pixi_env(path):
             cmd = [
-                'pixi', 'run', 'vllm-mlx', 'serve', model,
+                _pixi_executable(), 'run', 'vllm-mlx', 'serve', model,
                 '--host', host, '--port', str(port),
             ]
             return cmd + ctx_flags + _param_flags(VLLM_MLX_PARAM_FLAGS) + passthrough, path

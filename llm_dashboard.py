@@ -5,13 +5,10 @@ from __future__ import annotations
 
 import os
 import re
-import signal
 import subprocess
 import sys
 import threading
 import time
-import webbrowser
-import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -29,45 +26,122 @@ except ImportError:
 _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
-import llm  # noqa: E402
+import llm   # noqa: E402
 
 
 # ---------------------------------------------------------------------------
 # Theme
 # ---------------------------------------------------------------------------
 
-BG = wx.Colour(244, 244, 250)
-CARD = wx.Colour(255, 255, 255)
-BORDER = wx.Colour(220, 220, 240)
-TEXT = wx.Colour(26, 26, 48)
-TEXT_MUTED = wx.Colour(104, 104, 160)
-ACCENT = wx.Colour(124, 58, 237)
-SUCCESS = wx.Colour(5, 150, 105)
-ERROR = wx.Colour(220, 38, 38)
-WARN = wx.Colour(217, 119, 6)
-DOT_IDLE = wx.Colour(180, 180, 200)
+LIGHT = 'light'
+DARK = 'dark'
+
+_THEMES = {
+    LIGHT: {
+        'bg': wx.Colour(244, 244, 250),
+        'card': wx.Colour(255, 255, 255),
+        'accent': wx.Colour(124, 58, 237),
+        'text': wx.Colour(26, 26, 48),
+        'text_muted': wx.Colour(104, 104, 160),
+        'success': wx.Colour(5, 150, 105),
+        'warn': wx.Colour(217, 119, 6),
+        'dot_idle': wx.Colour(180, 180, 200),
+    },
+    DARK: {
+        'bg': wx.Colour(30, 30, 46),
+        'card': wx.Colour(42, 42, 58),
+        'accent': wx.Colour(160, 100, 255),
+        'text': wx.Colour(220, 220, 240),
+        'text_muted': wx.Colour(140, 140, 170),
+        'success': wx.Colour(80, 200, 120),
+        'warn': wx.Colour(240, 160, 60),
+        'dot_idle': wx.Colour(100, 100, 130),
+    },
+}
+
+
+def tc(key: str, theme: str | None = None) -> wx.Colour:
+    """Return a colour for *key* in *theme* (defaults to current theme)."""
+    t = theme if theme else _THEME.mode
+    return _THEMES[t][key]
+
+
+class _Theme:
+    """Shared theme state for the dashboard."""
+
+    def __init__(self):
+        self._mode: str = LIGHT
+        self._callbacks: list[callable] = []
+
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    def set_mode(self, mode: str) -> None:
+        if self._mode == mode:
+            return
+        self._mode = mode
+        for cb in self._callbacks:
+            cb(mode)
+
+    def toggle(self) -> None:
+        self.set_mode(DARK if self._mode == LIGHT else LIGHT)
+
+    def on_change(self, cb: callable) -> None:
+        self._callbacks.append(cb)
+
+
+_THEME = _Theme()
 
 POLL_MS = 2000
 
 
-def _font(size: int, *, bold: bool = False, mono: bool = False) -> wx.Font:
+# ---------------------------------------------------------------------------
+# UI helpers
+# ---------------------------------------------------------------------------
+
+
+def _font(
+    size: int, *, bold: bool = False, mono: bool = False,
+) -> wx.Font:
     family = wx.FONTFAMILY_TELETYPE if mono else wx.FONTFAMILY_DEFAULT
     weight = wx.FONTWEIGHT_BOLD if bold else wx.FONTWEIGHT_NORMAL
     return wx.Font(size, family, wx.FONTSTYLE_NORMAL, weight)
 
 
+def _get_current_theme() -> str:
+    """Return the current theme mode string."""
+    return _THEME.mode
+
+
 def _label(
-    parent, text, *, size=11, bold=False, muted=False, mono=False, color=None
-):
+    parent,
+    text: str,
+    *,
+    size: int = 11,
+    bold: bool = False,
+    muted: bool = False,
+    mono: bool = False,
+) -> wx.StaticText:
     lbl = wx.StaticText(parent, label=text)
     lbl.SetFont(_font(size, bold=bold, mono=mono))
-    if color is not None:
-        lbl.SetForegroundColour(color)
-    elif muted:
-        lbl.SetForegroundColour(TEXT_MUTED)
+    if muted:
+        lbl.SetForegroundColour(tc('text_muted'))
     else:
-        lbl.SetForegroundColour(TEXT)
+        lbl.SetForegroundColour(tc('text'))
     return lbl
+
+
+def _apply_theme_to_all() -> None:
+    """Re-apply the current theme to all panels, notebooks, and children."""
+    for window in wx.GetTopLevelWindows():
+        if isinstance(window, wx.Frame):
+            window.SetBackgroundColour(tc('bg'))
+            for child in window.GetChildren():
+                if isinstance(child, wx.Panel):
+                    child.SetBackgroundColour(tc('bg'))
+                elif isinstance(child, wx.Notebook):
+                    child.SetBackgroundColour(tc('bg'))
 
 
 # ---------------------------------------------------------------------------
@@ -76,17 +150,19 @@ def _label(
 
 
 def run_detached(
-    provider: str, model: str, host: str, port: int,
-    ctx: int | None = None, params: dict | None = None,
+    provider: str,
+    model: str,
+    host: str,
+    port: int,
+    ctx: int | None = None,
+    params: dict | None = None,
 ) -> int:
-    """Spawn the model server detached. Writes state file. Returns the PID."""
+    """Spawn the model server detached. Writes state. Returns PID."""
     if params is None:
         params = {}
-
     run_model = model
     if provider == 'ollama' and params:
         run_model = llm._get_ollama_custom_model(model, params)
-
     cmd, cwd = llm._build_run_cmd(
         provider, run_model, host, port, [], ctx,
         params if provider != 'ollama' else None,
@@ -96,7 +172,6 @@ def run_detached(
         env['OLLAMA_HOST'] = f'{host}:{port}'
         if ctx is not None:
             env['OLLAMA_NUM_CTX'] = str(ctx)
-
     proc = subprocess.Popen(
         cmd,
         env=env,
@@ -106,18 +181,16 @@ def run_detached(
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
-    llm.write_state(
-        {
-            'provider': provider,
-            'model': model,
-            'host': host,
-            'port': port,
-            'pid': proc.pid,
-            'started_at': datetime.now().isoformat(timespec='seconds'),
-            'ctx': ctx,
-            'params': params,
-        }
-    )
+    llm.write_state({
+        'provider': provider,
+        'model': model,
+        'host': host,
+        'port': port,
+        'pid': proc.pid,
+        'started_at': datetime.now().isoformat(timespec='seconds'),
+        'ctx': ctx,
+        'params': params,
+    })
     return proc.pid
 
 
@@ -125,27 +198,23 @@ def stop_running() -> tuple[bool, str]:
     state = llm.read_state()
     if not state:
         return False, 'No model is running.'
-
     pid = state.get('pid')
     provider = state.get('provider')
     model = state.get('model')
     port = state.get('port')
-
     if pid and llm.is_process_alive(pid):
         llm._kill_process(pid)
     elif port:
-        # Model was auto-detected via HTTP (no PID stored) — find it by port.
         for p in llm._pids_on_port(port):
             llm._kill_process(p)
-
     if provider == 'ollama' and model:
         try:
             subprocess.run(
-                ['ollama', 'stop', model], check=True, capture_output=True
+                ['ollama', 'stop', model],
+                check=True, capture_output=True,
             )
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
-
     llm.clear_state()
     return True, f'Stopped {provider}: {model}'
 
@@ -158,53 +227,63 @@ def stop_running() -> tuple[bool, str]:
 class StatusBanner(wx.Panel):
     def __init__(self, parent, on_stop, on_refresh):
         super().__init__(parent)
-        self.SetBackgroundColour(CARD)
         self.on_stop = on_stop
         self.on_refresh = on_refresh
+        self._build_ui()
 
-        outer = wx.BoxSizer(wx.HORIZONTAL)
-
-        self.dot = wx.StaticText(self, label='●')
+    def _build_ui(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        row = wx.BoxSizer(wx.HORIZONTAL)
+        self.dot = wx.StaticText(self, label='\u25cf')
         self.dot.SetFont(_font(18))
-        self.dot.SetForegroundColour(DOT_IDLE)
-        outer.Add(
-            self.dot, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT | wx.RIGHT, 14
-        )
-
+        row.Add(self.dot, 0, wx.ALIGN_CENTER_VERTICAL
+                | wx.LEFT | wx.RIGHT, 14)
         info = wx.BoxSizer(wx.VERTICAL)
-        self.title = _label(self, 'No model running', size=14, bold=True)
+        self.title = _label(self, 'No model running',
+                            size=14, bold=True)
         self.detail = _label(
-            self, 'Use the Models tab to start one.', muted=True
+            self,
+            'Use the Models tab to start one.',
+            muted=True,
         )
-        self.params_detail = _label(self, '', muted=True, size=10)
+        self.params_detail = _label(
+            self, '', muted=True, size=10,
+        )
         self.params_detail.Hide()
         info.Add(self.title, 0, wx.BOTTOM, 2)
         info.Add(self.detail, 0, wx.BOTTOM, 2)
         info.Add(self.params_detail, 0)
-        outer.Add(info, 1, wx.ALIGN_CENTER_VERTICAL | wx.TOP | wx.BOTTOM, 16)
-
+        row.Add(info, 1, wx.ALIGN_CENTER_VERTICAL
+                | wx.TOP | wx.BOTTOM, 16)
         self.stop_btn = wx.Button(self, label='Stop')
-        self.stop_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_stop())
+        self.stop_btn.Bind(
+            wx.EVT_BUTTON, lambda e: self.on_stop(),
+        )
         self.stop_btn.Hide()
-        outer.Add(self.stop_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
-
+        row.Add(self.stop_btn, 0,
+                wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
         self.refresh_btn = wx.Button(self, label='Refresh')
-        self.refresh_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_refresh())
-        outer.Add(self.refresh_btn, 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 14)
-
-        self.SetSizer(outer)
+        self.refresh_btn.Bind(
+            wx.EVT_BUTTON, lambda e: self.on_refresh(),
+        )
+        row.Add(self.refresh_btn, 0,
+                wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 14)
+        sizer.Add(row, 0, wx.EXPAND | wx.BOTTOM, 10)
+        self.SetSizer(sizer)
 
     def update_status(self, state):
+        theme = _THEME.mode
         if not state:
-            self.dot.SetForegroundColour(DOT_IDLE)
+            self.dot.SetForegroundColour(tc('dot_idle', theme))
             self.title.SetLabel('No model running')
-            self.detail.SetLabel('Use the Models tab to start one.')
+            self.detail.SetLabel(
+                'Use the Models tab to start one.',
+            )
             self.params_detail.Hide()
             self.stop_btn.Hide()
             self.Layout()
             self.GetParent().Layout()
             return
-
         is_external = state.get('external', False)
         pid = state.get('pid')
         alive = False
@@ -219,24 +298,40 @@ class StatusBanner(wx.Panel):
         port = state.get('port', '?')
         ctx = state.get('ctx')
         params = state.get('params') or {}
-        base_url = llm.BASE_URL_TEMPLATES.get(
-            provider, 'http://{host}:{port}'
-        ).format(host=host, port=port)
+        base_url = (
+            llm.BASE_URL_TEMPLATES.get(
+                provider, 'http://{host}:{port}',
+            )
+            .format(host=host, port=port)
+        )
+
+        dot_text = f'{provider}  \u00b7  {model}'
+        part_text = '  \u00b7  '.join([
+            base_url, f'{host}:{port}',
+        ])
+        if pid is not None:
+            part_text += f'  \u00b7  PID {pid}'
+        started = state.get('started_at', '')
+        if started:
+            part_text += f'  \u00b7  started {started}'
 
         if alive:
-            self.dot.SetForegroundColour(SUCCESS)
-            self.title.SetLabel(f'{provider}    ·    {model}')
-            parts = [base_url, f'{host}:{port}']
-            if pid is not None:
-                parts.append(f'PID {pid}')
-            started = state.get('started_at', '')
-            if started:
-                parts.append(f'started {started}')
-            self.detail.SetLabel('    ·    '.join(parts))
+            self.dot.SetForegroundColour(
+                tc('success', theme),
+            )
+            self.title.SetLabel(dot_text)
+            self.detail.SetLabel(part_text)
         else:
-            self.dot.SetForegroundColour(WARN)
-            self.title.SetLabel(f'{provider}    ·    {model}    (not responding)')
-            self.detail.SetLabel(f'PID {pid} — process no longer alive, clearing state…')
+            self.dot.SetForegroundColour(
+                tc('warn', theme),
+            )
+            self.title.SetLabel(
+                f'{dot_text}  (not responding)',
+            )
+            self.detail.SetLabel(
+                f'PID {pid} \u2014 process no longer alive, '
+                f'clearing state\u2026',
+            )
 
         param_parts = []
         if ctx is not None:
@@ -245,11 +340,12 @@ class StatusBanner(wx.Panel):
             if v is not None:
                 param_parts.append(f'{k} = {v}')
         if param_parts:
-            self.params_detail.SetLabel('    '.join(param_parts))
+            self.params_detail.SetLabel(
+                '  \u00b7  '.join(param_parts),
+            )
             self.params_detail.Show()
         else:
             self.params_detail.Hide()
-
         self.stop_btn.Show()
 
         self.Layout()
@@ -263,46 +359,55 @@ class StatusBanner(wx.Panel):
 
 
 # ---------------------------------------------------------------------------
-# Download progress frame  (non-modal — real wx.Frame, not a dialog)
+# Download progress frame
 # ---------------------------------------------------------------------------
 
 
 class _DownloadProgress(wx.Frame):
     """Floating progress window that never blocks the main frame."""
 
-    def __init__(self, model: str, on_cancel):
+    def __init__(self, model, on_cancel):
         super().__init__(
-            None,   # top-level: no parent so macOS can't make it a sheet
+            None,
             title=f'Downloading {model}',
             size=(500, 130),
             style=(
                 wx.DEFAULT_FRAME_STYLE
-                & ~(wx.RESIZE_BORDER | wx.MAXIMIZE_BOX | wx.MINIMIZE_BOX)
+                & ~(wx.RESIZE_BORDER
+                    | wx.MAXIMIZE_BOX
+                    | wx.MINIMIZE_BOX)
             ),
         )
-        self.SetBackgroundColour(CARD)
         self._on_cancel_cb = on_cancel
         self._dismissing = False
-
-        sizer = wx.BoxSizer(wx.VERTICAL)
-
-        self._label = _label(self, 'Connecting…', size=11)
-        sizer.Add(self._label, 0, wx.LEFT | wx.RIGHT | wx.TOP, 16)
-
-        self._gauge = wx.Gauge(self, range=100)
-        sizer.Add(self._gauge, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 12)
-
-        btn_row = wx.BoxSizer(wx.HORIZONTAL)
-        btn_row.AddStretchSpacer()
-        cancel_btn = wx.Button(self, label='Cancel')
-        cancel_btn.Bind(wx.EVT_BUTTON, lambda e: self._cancel())
-        btn_row.Add(cancel_btn, 0, wx.RIGHT, 12)
-        sizer.Add(btn_row, 0, wx.TOP | wx.BOTTOM, 8)
-
-        self.SetSizer(sizer)
+        self._apply_theme()
+        self._build_ui()
         self.Bind(wx.EVT_CLOSE, self._on_close_evt)
         self.Centre()
         self.Show()
+
+    def _apply_theme(self):
+        self.SetBackgroundColour(tc('card'))
+
+    def _build_ui(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        self._dyn_label = _label(
+            self, 'Connecting\u2026', size=11,
+        )
+        sizer.Add(self._dyn_label, 0, wx.LEFT
+                   | wx.RIGHT | wx.TOP, 16)
+        self._gauge = wx.Gauge(self, range=100)
+        sizer.Add(self._gauge, 0, wx.EXPAND
+                   | wx.LEFT | wx.RIGHT | wx.TOP, 12)
+        btn_row = wx.BoxSizer(wx.HORIZONTAL)
+        btn_row.AddStretchSpacer()
+        cancel_btn = wx.Button(self, label='Cancel')
+        cancel_btn.Bind(
+            wx.EVT_BUTTON, lambda e: self._cancel(),
+        )
+        btn_row.Add(cancel_btn, 0, wx.RIGHT, 12)
+        sizer.Add(btn_row, 0, wx.TOP | wx.BOTTOM, 8)
+        self.SetSizer(sizer)
 
     def _cancel(self):
         self._on_cancel_cb()
@@ -312,14 +417,14 @@ class _DownloadProgress(wx.Frame):
             self._on_cancel_cb()
         event.Skip()
 
-    def update(self, pct: int, label: str) -> None:
+    def update(self, pct, label):
         try:
             self._gauge.SetValue(pct)
-            self._label.SetLabel(label)
+            self._dyn_label.SetLabel(label)
         except Exception:
             pass
 
-    def dismiss(self) -> None:
+    def dismiss(self):
         self._dismissing = True
         try:
             self.Destroy()
@@ -333,66 +438,108 @@ class _DownloadProgress(wx.Frame):
 
 
 class ModelsTab(wx.Panel):
-    def __init__(self, parent, on_run, on_configure, on_delete, on_download):
+    def __init__(
+        self,
+        parent,
+        on_run,
+        on_configure,
+        on_delete,
+        on_download,
+    ):
         super().__init__(parent)
-        self.SetBackgroundColour(BG)
         self.on_run = on_run
         self.on_configure = on_configure
         self.on_delete = on_delete
         self.on_download = on_download
+        self._build_ui()
+        self.refresh()
 
+    def _apply_theme(self):
+        self.SetBackgroundColour(tc('bg'))
+
+    def _build_ui(self):
+        self._apply_theme()
         sizer = wx.BoxSizer(wx.VERTICAL)
 
         tb = wx.BoxSizer(wx.HORIZONTAL)
-        tb.Add(
-            _label(self, 'Local models', bold=True, size=14),
-            1,
-            wx.ALIGN_CENTER_VERTICAL,
-        )
-
+        tb.Add(_label(self, 'Local models',
+                       bold=True, size=14),
+               1, wx.ALIGN_CENTER_VERTICAL)
         self.run_btn = wx.Button(self, label='Run selected')
-        self.run_btn.Bind(wx.EVT_BUTTON, self._on_run_clicked)
+        self.run_btn.Bind(
+            wx.EVT_BUTTON, self._on_run_clicked,
+        )
         tb.Add(self.run_btn, 0, wx.RIGHT, 6)
-
         download_btn = wx.Button(self, label='Download')
-        download_btn.Bind(wx.EVT_BUTTON, lambda e: self.on_download())
+        download_btn.Bind(
+            wx.EVT_BUTTON, lambda e: self.on_download(),
+        )
         tb.Add(download_btn, 0, wx.RIGHT, 6)
-
         self.delete_btn = wx.Button(self, label='Delete')
-        self.delete_btn.Bind(wx.EVT_BUTTON, self._on_delete_clicked)
+        self.delete_btn.Bind(
+            wx.EVT_BUTTON, self._on_delete_clicked,
+        )
         tb.Add(self.delete_btn, 0, wx.RIGHT, 6)
-
         refresh_btn = wx.Button(self, label='Refresh')
-        refresh_btn.Bind(wx.EVT_BUTTON, lambda e: self.refresh())
+        refresh_btn.Bind(
+            wx.EVT_BUTTON, lambda e: self.refresh(),
+        )
         tb.Add(refresh_btn, 0)
         sizer.Add(tb, 0, wx.EXPAND | wx.ALL, 14)
 
         self.list = wx.ListCtrl(
             self,
-            style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_NONE,
+            style=wx.LC_REPORT
+            | wx.LC_SINGLE_SEL
+            | wx.BORDER_NONE,
         )
-        self.list.SetBackgroundColour(CARD)
+        self.list.SetBackgroundColour(tc('card'))
         self.list.AppendColumn('Provider', width=160)
         self.list.AppendColumn('Model', width=420)
         self.list.AppendColumn('Source', width=140)
-        self.list.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self._on_double)
-        self.list.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, self._on_right_click)
-        sizer.Add(self.list, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 14)
-
+        self.list.Bind(
+            wx.EVT_LIST_ITEM_ACTIVATED,
+            self._on_double,
+        )
+        self.list.Bind(
+            wx.EVT_LIST_ITEM_RIGHT_CLICK,
+            self._on_right_click,
+        )
+        sizer.Add(
+            self.list, 1,
+            wx.EXPAND | wx.LEFT
+            | wx.RIGHT | wx.BOTTOM, 14,
+        )
         self.SetSizer(sizer)
-        self.refresh()
+
+    def apply_theme(self):
+        """Re-apply the current theme to all child cards."""
+        self._apply_theme()
+        for card in self.list.GetChildren():
+            if isinstance(card, wx.Window):
+                card.SetBackgroundColour(tc('card'))
 
     def refresh(self):
         self.list.DeleteAllItems()
         ollama_models = llm.get_ollama_models()
         hf_models = llm.get_huggingface_models()
-
-        rows = [('ollama', m, 'ollama') for m in ollama_models]
-        rows += [('mlx-lm', m, 'huggingface') for m in hf_models]
-        rows += [('vllm-mlx', m, 'huggingface') for m in hf_models]
-
+        rows = [
+            ('ollama', m, 'ollama')
+            for m in ollama_models
+         ]
+        rows += [
+            ('mlx-lm', m, 'huggingface')
+            for m in hf_models
+         ]
+        rows += [
+            ('vllm-mlx', m, 'huggingface')
+            for m in hf_models
+         ]
         for provider, model, source in rows:
-            idx = self.list.InsertItem(self.list.GetItemCount(), provider)
+            idx = self.list.InsertItem(
+                self.list.GetItemCount(),
+                provider,
+            )
             self.list.SetItem(idx, 1, model)
             self.list.SetItem(idx, 2, source)
 
@@ -400,7 +547,10 @@ class ModelsTab(wx.Panel):
         idx = self.list.GetFirstSelected()
         if idx == -1:
             return None
-        return self.list.GetItemText(idx, 0), self.list.GetItemText(idx, 1)
+        return (
+            self.list.GetItemText(idx, 0),
+            self.list.GetItemText(idx, 1),
+        )
 
     def _on_double(self, event):
         sel = self._selected_row()
@@ -413,12 +563,26 @@ class ModelsTab(wx.Panel):
             return
         menu = wx.Menu()
         run_item = menu.Append(wx.ID_ANY, 'Run model')
-        opts_item = menu.Append(wx.ID_ANY, 'Model options')
+        opts_item = menu.Append(
+            wx.ID_ANY, 'Model options',
+        )
         menu.AppendSeparator()
         del_item = menu.Append(wx.ID_ANY, 'Delete model')
-        self.Bind(wx.EVT_MENU, lambda e, s=sel: self.on_run(*s), run_item)
-        self.Bind(wx.EVT_MENU, lambda e, s=sel: self.on_configure(*s), opts_item)
-        self.Bind(wx.EVT_MENU, lambda e, s=sel: self.on_delete(*s), del_item)
+        self.Bind(
+            wx.EVT_MENU,
+            lambda e, s=sel: self.on_run(*s),
+            run_item,
+        )
+        self.Bind(
+            wx.EVT_MENU,
+            lambda e, s=sel: self.on_configure(*s),
+            opts_item,
+        )
+        self.Bind(
+            wx.EVT_MENU,
+            lambda e, s=sel: self.on_delete(*s),
+            del_item,
+        )
         self.PopupMenu(menu)
         menu.Destroy()
 
@@ -453,51 +617,64 @@ class ModelsTab(wx.Panel):
 class ProvidersTab(scrolled.ScrolledPanel):
     def __init__(self, parent):
         super().__init__(parent)
-        self.SetBackgroundColour(BG)
-
-        self.sizer = wx.BoxSizer(wx.VERTICAL)
-        self.sizer.Add(
-            _label(self, 'Providers', bold=True, size=14), 0, wx.ALL, 14
-        )
-
-        self.cards_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.sizer.Add(
-            self.cards_sizer, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 14
-        )
-
-        self.SetSizer(self.sizer)
+        self._build_ui()
         self.refresh()
+
+    def _build_ui(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(_label(self, 'Providers',
+                          bold=True, size=14),
+                   0, wx.ALL, 14)
+        self.cards_sizer = wx.BoxSizer(wx.VERTICAL)
+        sizer.Add(
+            self.cards_sizer, 1,
+            wx.EXPAND
+            | wx.LEFT | wx.RIGHT | wx.BOTTOM, 14,
+        )
+        self.SetSizer(sizer)
+
+    def apply_theme(self):
+        for card in self.GetChildren():
+            if isinstance(card, wx.Panel):
+                card.SetBackgroundColour(tc('card'))
 
     def refresh(self):
         self.cards_sizer.Clear(True)
         for provider in llm.PROVIDERS:
             card = self._make_card(provider)
-            self.cards_sizer.Add(card, 0, wx.EXPAND | wx.BOTTOM, 10)
+            self.cards_sizer.Add(
+                card, 0,
+                wx.EXPAND | wx.BOTTOM, 10,
+            )
         self.Layout()
-        self.SetupScrolling(scroll_x=False, scrollToTop=False)
+        self.SetupScrolling(
+            scroll_x=False,
+            scrollToTop=False,
+        )
 
     def _make_card(self, provider):
         card = wx.Panel(self)
-        card.SetBackgroundColour(CARD)
+        card.SetBackgroundColour(tc('card'))
         sizer = wx.BoxSizer(wx.VERTICAL)
-
         head = wx.BoxSizer(wx.HORIZONTAL)
         head.Add(
-            _label(card, provider, bold=True, size=14),
-            1,
-            wx.ALIGN_CENTER_VERTICAL,
+            _label(card, provider,
+                   bold=True, size=14),
+            1, wx.ALIGN_CENTER_VERTICAL,
         )
         executable, _ = llm._provider_executable(provider)
-        sizer.Add(head, 0, wx.EXPAND | wx.ALL, 12)
-
+        sizer.Add(head, 0,
+                   wx.EXPAND | wx.ALL, 12)
         port = llm.DEFAULT_PORTS[provider]
-        base_url = llm.BASE_URL_TEMPLATES[provider].format(
-            host=llm.DEFAULT_HOST,
-            port=port,
+        base_url = (
+            llm.BASE_URL_TEMPLATES[provider]
+            .format(host=llm.DEFAULT_HOST, port=port)
         )
         model_dir = llm.PROVIDER_MODEL_DIRS[provider]
-
-        grid = wx.FlexGridSizer(rows=4, cols=2, hgap=12, vgap=4)
+        grid = wx.FlexGridSizer(
+            rows=4, cols=2,
+            hgap=12, vgap=4,
+        )
         grid.AddGrowableCol(1, 1)
         for key, val in [
             ('Executable', executable),
@@ -506,48 +683,36 @@ class ProvidersTab(scrolled.ScrolledPanel):
             ('Model dir', str(model_dir)),
         ]:
             grid.Add(
-                _label(card, key, muted=True, size=10),
+                _label(card, key,
+                       muted=True, size=10),
                 0,
                 wx.ALIGN_CENTER_VERTICAL,
             )
             grid.Add(
-                _label(card, val, mono=True, size=10),
+                _label(card, val,
+                       mono=True, size=10),
                 0,
-                wx.ALIGN_CENTER_VERTICAL | wx.EXPAND,
+                wx.ALIGN_CENTER_VERTICAL
+                | wx.EXPAND,
             )
-        sizer.Add(grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 12)
-
+        sizer.Add(
+            grid, 0,
+            wx.EXPAND | wx.LEFT
+            | wx.RIGHT | wx.BOTTOM, 12,
+        )
         if provider in ('ollama', 'mlx-lm', 'vllm-mlx'):
             row = wx.BoxSizer(wx.HORIZONTAL)
             row.AddStretchSpacer()
-            btn = wx.Button(card, label='Set path…')
-            btn.Bind(wx.EVT_BUTTON, lambda e, p=provider: self._set_path(p))
+            btn = wx.Button(card, label='Set path\u2026')
+            btn.Bind(
+                wx.EVT_BUTTON,
+                lambda e, p=provider: self._set_path(p),
+            )
             row.Add(btn, 0, wx.RIGHT, 12)
-            sizer.Add(row, 0, wx.EXPAND | wx.BOTTOM, 8)
-
+            sizer.Add(row, 0,
+                       wx.EXPAND | wx.BOTTOM, 8)
         card.SetSizer(sizer)
         return card
-
-    def _set_path(self, provider):
-        config = llm.read_config()
-        current = config.get('providers', {}).get(provider, {}).get('path', '')
-
-        dlg = wx.TextEntryDialog(
-            self,
-            f'Path to {provider} executable, or directory containing pixi.toml:',
-            f'Set {provider} path',
-            current,
-        )
-        if dlg.ShowModal() == wx.ID_OK:
-            path = dlg.GetValue().strip()
-            if path:
-                config = llm.read_config()
-                config.setdefault('providers', {}).setdefault(provider, {})[
-                    'path'
-                ] = path
-                llm.write_config(config)
-                self.refresh()
-        dlg.Destroy()
 
 
 # ---------------------------------------------------------------------------
@@ -566,103 +731,223 @@ class RunDialog(wx.Dialog):
         ctx_default=None,
         params_default=None,
     ):
-        super().__init__(parent, title='Model settings', size=(520, 480))
-        self.SetBackgroundColour(BG)
+        super().__init__(
+            parent,
+            title='Model settings',
+            size=(520, 480),
+        )
+        self.SetBackgroundColour(tc('bg'))
         if params_default is None:
             params_default = {}
+        self._default_provider = provider_default
+        self._default_model = model_default
+        self._default_host = host_default
+        self._default_port = port_default
+        self._default_ctx = ctx_default
+        self._default_params = params_default
+        self._build_ui()
 
+    def _build_ui(self):
         sizer = wx.BoxSizer(wx.VERTICAL)
-
-        # Connection settings
-        grid = wx.FlexGridSizer(rows=5, cols=2, hgap=12, vgap=10)
+        grid = wx.FlexGridSizer(
+            rows=5, cols=2,
+            hgap=12, vgap=10,
+        )
         grid.AddGrowableCol(1, 1)
-
-        grid.Add(_label(self, 'Provider', muted=True), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.provider = wx.Choice(self, choices=llm.PROVIDERS)
-        if provider_default in llm.PROVIDERS:
-            self.provider.SetSelection(llm.PROVIDERS.index(provider_default))
-        elif 'mlx' in provider_default:
-            self.provider.SetSelection(llm.PROVIDERS.index('mlx-lm'))
-        else:
-            self.provider.SetSelection(0)
+        grid.Add(
+            _label(self, 'Provider',
+                   muted=True),
+            0, wx.ALIGN_CENTER_VERTICAL,
+        )
+        self.provider = wx.Choice(
+            self,
+            choices=llm.PROVIDERS,
+        )
         grid.Add(self.provider, 0, wx.EXPAND)
-
-        grid.Add(_label(self, 'Model', muted=True), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.model = wx.TextCtrl(self, value=model_default)
+        grid.Add(
+            _label(self, 'Model',
+                   muted=True),
+            0, wx.ALIGN_CENTER_VERTICAL,
+        )
+        self.model = wx.TextCtrl(self)
         grid.Add(self.model, 0, wx.EXPAND)
-
-        grid.Add(_label(self, 'Host', muted=True), 0, wx.ALIGN_CENTER_VERTICAL)
-        self.host = wx.TextCtrl(self, value=host_default or llm.DEFAULT_HOST)
+        grid.Add(
+            _label(self, 'Host',
+                   muted=True),
+            0, wx.ALIGN_CENTER_VERTICAL,
+        )
+        self.host = wx.TextCtrl(self)
         grid.Add(self.host, 0, wx.EXPAND)
-
-        grid.Add(_label(self, 'Port', muted=True), 0, wx.ALIGN_CENTER_VERTICAL)
-        port_str = str(port_default) if port_default is not None else ''
-        self.port = wx.TextCtrl(self, value=port_str)
-        if not port_str:
-            self.port.SetHint('default for provider')
+        grid.Add(
+            _label(self, 'Port',
+                   muted=True),
+            0, wx.ALIGN_CENTER_VERTICAL,
+        )
+        self.port = wx.TextCtrl(self)
         grid.Add(self.port, 0, wx.EXPAND)
-
-        grid.Add(_label(self, 'Context window', muted=True), 0, wx.ALIGN_CENTER_VERTICAL)
-        ctx_str = str(ctx_default) if ctx_default is not None else str(llm.DEFAULT_CTX)
-        self.ctx = wx.TextCtrl(self, value=ctx_str)
+        grid.Add(
+            _label(self,
+                   'Context window',
+                   muted=True),
+            0, wx.ALIGN_CENTER_VERTICAL,
+        )
+        self.ctx = wx.TextCtrl(self)
         grid.Add(self.ctx, 0, wx.EXPAND)
-
-        sizer.Add(grid, 0, wx.EXPAND | wx.ALL, 18)
-
-        # Parameters separator
-        sizer.Add(wx.StaticLine(self), 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 18)
-        sizer.Add(_label(self, 'Model parameters  (leave blank for provider default)', muted=True, size=10),
-                  0, wx.LEFT | wx.TOP, 18)
-
-        # 3×4 grid: label | field | label | field
-        params_grid = wx.FlexGridSizer(rows=3, cols=4, hgap=8, vgap=8)
+        sizer.Add(grid, 0,
+                   wx.EXPAND | wx.ALL, 18)
+        sizer.Add(wx.StaticLine(self), 0,
+                   wx.EXPAND
+                    | wx.LEFT | wx.RIGHT, 18)
+        sizer.Add(
+            _label(
+                self,
+                'Model parameters '
+                '(leave blank for '
+                'provider default)',
+                muted=True,
+                size=10,
+            ),
+            0,
+            wx.LEFT | wx.TOP, 18,
+        )
+        params_grid = wx.FlexGridSizer(
+            rows=3, cols=4,
+            hgap=8, vgap=8,
+        )
         params_grid.AddGrowableCol(1, 1)
         params_grid.AddGrowableCol(3, 1)
-
         param_defs = [
             ('temperature', 'Temperature'),
             ('top_p', 'Top-P'),
             ('top_k', 'Top-K'),
             ('min_p', 'Min-P'),
-            ('repeat_penalty', 'Repeat Penalty'),
-            ('presence_penalty', 'Presence Penalty'),
+            ('repeat_penalty',
+             'Repeat Penalty'),
+            ('presence_penalty',
+             'Presence Penalty'),
         ]
-        self._param_fields: dict[str, wx.TextCtrl] = {}
+        self._param_fields = {}
         for pname, plabel in param_defs:
-            params_grid.Add(_label(self, plabel, muted=True, size=10), 0, wx.ALIGN_CENTER_VERTICAL)
-            val = params_default.get(pname, '')
-            field = wx.TextCtrl(self, value=str(val) if val != '' else '')
+            params_grid.Add(
+                _label(self, plabel,
+                       muted=True,
+                       size=10),
+                0,
+                wx.ALIGN_CENTER_VERTICAL,
+            )
+            field = wx.TextCtrl(self)
             field.SetHint('default')
             self._param_fields[pname] = field
-            params_grid.Add(field, 0, wx.EXPAND)
-
-        sizer.Add(params_grid, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP | wx.BOTTOM, 18)
-
+            params_grid.Add(
+                field, 0, wx.EXPAND,
+            )
+        sizer.Add(params_grid, 0,
+                   wx.EXPAND
+                    | wx.LEFT | wx.RIGHT
+                    | wx.TOP | wx.BOTTOM, 18)
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         btn_row.AddStretchSpacer()
-        cancel = wx.Button(self, wx.ID_CANCEL, 'Cancel')
-        run_btn = wx.Button(self, wx.ID_OK, 'Save & Run')
+        cancel = wx.Button(self,
+                           wx.ID_CANCEL,
+                           'Cancel')
+        run_btn = wx.Button(
+            self, wx.ID_OK,
+            'Save & Run',
+        )
         run_btn.SetDefault()
-        btn_row.Add(cancel, 0, wx.RIGHT, 6)
+        btn_row.Add(cancel, 0,
+                      wx.RIGHT, 6)
         btn_row.Add(run_btn, 0)
-        sizer.Add(btn_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 18)
-
+        sizer.Add(btn_row, 0,
+                   wx.EXPAND
+                    | wx.LEFT
+                    | wx.RIGHT
+                    | wx.BOTTOM, 18)
         self.SetSizer(sizer)
 
+    def _populate_defaults(self):
+        """Fill fields with saved/default values."""
+        if self._default_provider in llm.PROVIDERS:
+            self.provider.SetSelection(
+                llm.PROVIDERS.index(
+                    self._default_provider,
+                ),
+            )
+        elif 'mlx' in self._default_provider:
+            self.provider.SetSelection(
+                llm.PROVIDERS.index(
+                    'mlx-lm'),
+            )
+        else:
+            self.provider.SetSelection(0)
+        self.model.SetValue(self._default_model)
+        self.host.SetValue(
+            self._default_host
+            or llm.DEFAULT_HOST,
+        )
+        if self._default_port is not None:
+            self.port.SetValue(
+                str(self._default_port),
+            )
+        else:
+            self.port.SetValue('')
+        if self._default_ctx is not None:
+            self.ctx.SetValue(
+                str(self._default_ctx),
+            )
+        else:
+            self.ctx.SetValue('')
+        if self._default_params:
+            for pname, field in (
+                self._param_fields.items()
+            ):
+                val = self._default_params.get(
+                    pname, '',
+                )
+                field.SetValue(
+                    str(val)
+                    if val != '' else '',
+                )
+
     def get_values(self):
-        provider = llm.PROVIDERS[self.provider.GetSelection()]
+        provider = (
+            llm.PROVIDERS[
+                self.provider.GetSelection()
+            ]
+        )
         model = self.model.GetValue().strip()
-        host = self.host.GetValue().strip() or llm.DEFAULT_HOST
+        host = (
+            self.host.GetValue()
+            .strip()
+            or llm.DEFAULT_HOST
+        )
         port_str = self.port.GetValue().strip()
-        port = int(port_str) if port_str else llm.DEFAULT_PORTS[provider]
+        port = (
+            int(port_str)
+            if port_str
+            else llm.DEFAULT_PORTS[provider]
+        )
         ctx_str = self.ctx.GetValue().strip()
-        ctx = int(ctx_str) if ctx_str else llm.DEFAULT_CTX
-        params: dict = {}
-        for pname, field in self._param_fields.items():
+        ctx = (
+            int(ctx_str)
+            if ctx_str
+            else None
+        )
+        params = {}
+        for pname, field in (
+            self._param_fields.items()
+        ):
             val_str = field.GetValue().strip()
             if val_str:
                 try:
-                    params[pname] = int(float(val_str)) if pname == 'top_k' else float(val_str)
+                    if pname == 'top_k':
+                        params[pname] = int(
+                            float(val_str),
+                        )
+                    else:
+                        params[pname] = float(
+                            val_str,
+                        )
                 except ValueError:
                     pass
         return provider, model, host, port, ctx, params
@@ -670,157 +955,340 @@ class RunDialog(wx.Dialog):
 
 class DownloadDialog(wx.Dialog):
     def __init__(self, parent):
-        super().__init__(parent, title='Download model', size=(600, 480))
-        self.SetBackgroundColour(BG)
-        self._hf_results: list[dict] = []
-        self._sort_col: int = 1   # default: Downloads
-        self._sort_rev: bool = True
+        super().__init__(
+            parent,
+            title='Download model',
+            size=(600, 480),
+        )
+        self.SetBackgroundColour(tc('bg'))
+        self._hf_results = []
+        self._sort_col = 1
+        self._sort_rev = True
+        self._build_ui()
 
+    def _build_ui(self):
         sizer = wx.BoxSizer(wx.VERTICAL)
-
-        # Provider row
         prov_row = wx.BoxSizer(wx.HORIZONTAL)
-        prov_row.Add(_label(self, 'Provider', muted=True), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 10)
-        self.provider = wx.Choice(self, choices=llm.PROVIDERS)
+        prov_row.Add(
+            _label(self, 'Provider',
+                   muted=True),
+            0,
+            wx.ALIGN_CENTER_VERTICAL
+            | wx.RIGHT, 10,
+        )
+        self.provider = wx.Choice(
+            self,
+            choices=llm.PROVIDERS,
+        )
         self.provider.SetSelection(0)
         prov_row.Add(self.provider, 0)
-        sizer.Add(prov_row, 0, wx.ALL, 16)
-
-        # Simplebook: page 0 = ollama, page 1 = HuggingFace
+        sizer.Add(prov_row, 0,
+                   wx.ALL, 16)
         self.book = wx.Simplebook(self)
-        self.book.SetBackgroundColour(BG)
+        self.book.SetBackgroundColour(
+            tc('bg')
+        )
 
-        # --- Ollama panel ---
+        # Ollama panel
         ollama_panel = wx.Panel(self.book)
-        ollama_panel.SetBackgroundColour(BG)
+        ollama_panel.SetBackgroundColour(
+            tc('bg')
+        )
         op = wx.BoxSizer(wx.HORIZONTAL)
-        op.Add(_label(ollama_panel, 'Model name', muted=True), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
-        self.ollama_model = wx.TextCtrl(ollama_panel, size=(320, -1))
-        self.ollama_model.SetHint('e.g. llama3.2')
+        op.Add(
+            _label(ollama_panel, 'Model name',
+                   muted=True),
+            0,
+            wx.ALIGN_CENTER_VERTICAL
+            | wx.RIGHT, 8,
+        )
+        self.ollama_model = wx.TextCtrl(
+            ollama_panel,
+            size=(320, -1),
+        )
+        self.ollama_model.SetHint(
+            'e.g. llama3.2',
+        )
         op.Add(self.ollama_model, 1)
         ollama_panel.SetSizer(op)
-        self.book.AddPage(ollama_panel, 'ollama')
-
-        # --- HuggingFace panel ---
-        hf_panel = wx.Panel(self.book)
-        hf_panel.SetBackgroundColour(BG)
-        hf = wx.BoxSizer(wx.VERTICAL)
-
-        search_row = wx.BoxSizer(wx.HORIZONTAL)
-        search_row.Add(_label(hf_panel, 'Search', muted=True), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
-        self.hf_query = wx.TextCtrl(hf_panel, size=(200, -1), style=wx.TE_PROCESS_ENTER)
-        self.hf_query.Bind(wx.EVT_TEXT_ENTER, self._on_search)
-        search_row.Add(self.hf_query, 1, wx.RIGHT, 10)
-        search_row.Add(_label(hf_panel, 'Filter', muted=True), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 6)
-        self.hf_filter = wx.TextCtrl(hf_panel, size=(100, -1))
-        self.hf_filter.SetHint('e.g. mlx')
-        search_row.Add(self.hf_filter, 0, wx.RIGHT, 8)
-        search_btn = wx.Button(hf_panel, label='Search')
-        search_btn.Bind(wx.EVT_BUTTON, self._on_search)
-        search_row.Add(search_btn, 0)
-        hf.Add(search_row, 0, wx.BOTTOM, 8)
-
-        self.hf_list = wx.ListCtrl(
-            hf_panel, style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_SIMPLE
+        self.book.AddPage(
+            ollama_panel, 'ollama',
         )
-        self.hf_list.AppendColumn('Model', width=270)
-        self.hf_list.AppendColumn('Downloads', width=90)
-        self.hf_list.AppendColumn('Likes', width=60)
-        self.hf_list.AppendColumn('Size', width=80)
-        self.hf_list.Bind(wx.EVT_LIST_ITEM_SELECTED, self._on_hf_select)
-        self.hf_list.Bind(wx.EVT_LIST_COL_CLICK, self._on_col_click)
-        hf.Add(self.hf_list, 1, wx.EXPAND | wx.BOTTOM, 8)
 
-        model_row = wx.BoxSizer(wx.HORIZONTAL)
-        model_row.Add(_label(hf_panel, 'Model ID', muted=True), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
-        self.hf_model = wx.TextCtrl(hf_panel, size=(280, -1))
-        self.hf_model.SetHint('org/model-name or select above')
-        model_row.Add(self.hf_model, 1, wx.RIGHT, 6)
-        copy_btn = wx.Button(hf_panel, label='Copy', size=(60, -1))
-        copy_btn.Bind(wx.EVT_BUTTON, self._on_copy)
+        # HuggingFace panel
+        hf_panel = wx.Panel(self.book)
+        hf_panel.SetBackgroundColour(
+            tc('bg')
+        )
+        hf = wx.BoxSizer(wx.VERTICAL)
+        search_row = wx.BoxSizer(
+            wx.HORIZONTAL,
+        )
+        search_row.Add(
+            _label(hf_panel, 'Search',
+                   muted=True),
+            0,
+            wx.ALIGN_CENTER_VERTICAL
+            | wx.RIGHT, 6,
+        )
+        self.hf_query = wx.TextCtrl(
+            hf_panel,
+            size=(200, -1),
+            style=wx.TE_PROCESS_ENTER,
+        )
+        self.hf_query.Bind(
+            wx.EVT_TEXT_ENTER,
+            self._on_search,
+        )
+        search_row.Add(self.hf_query,
+                         1, wx.RIGHT, 10)
+        search_row.Add(
+            _label(hf_panel, 'Filter',
+                   muted=True),
+            0,
+            wx.ALIGN_CENTER_VERTICAL
+            | wx.RIGHT, 6,
+        )
+        self.hf_filter = wx.TextCtrl(
+            hf_panel,
+            size=(100, -1),
+        )
+        self.hf_filter.SetHint('e.g. mlx')
+        search_row.Add(self.hf_filter,
+                         0, wx.RIGHT, 8)
+        search_btn = wx.Button(
+            hf_panel,
+            label='Search',
+        )
+        search_btn.Bind(
+            wx.EVT_BUTTON,
+            self._on_search,
+        )
+        search_row.Add(search_btn, 0)
+        hf.Add(search_row, 0,
+                wx.BOTTOM, 8)
+        self.hf_list = wx.ListCtrl(
+            hf_panel,
+            style=wx.LC_REPORT
+            | wx.LC_SINGLE_SEL
+            | wx.BORDER_SIMPLE,
+        )
+        self.hf_list.AppendColumn(
+            'Model',
+            width=270,
+        )
+        self.hf_list.AppendColumn(
+            'Downloads',
+            width=90,
+        )
+        self.hf_list.AppendColumn(
+            'Likes', width=60,
+        )
+        self.hf_list.AppendColumn(
+            'Size', width=80,
+        )
+        self.hf_list.Bind(
+            wx.EVT_LIST_ITEM_SELECTED,
+            self._on_hf_select,
+        )
+        self.hf_list.Bind(
+            wx.EVT_LIST_COL_CLICK,
+            self._on_col_click,
+        )
+        hf.Add(self.hf_list, 1,
+                wx.EXPAND | wx.BOTTOM, 8)
+        model_row = wx.BoxSizer(
+            wx.HORIZONTAL,
+        )
+        model_row.Add(
+            _label(hf_panel, 'Model ID',
+                   muted=True),
+            0,
+            wx.ALIGN_CENTER_VERTICAL
+            | wx.RIGHT, 8,
+        )
+        self.hf_model = wx.TextCtrl(
+            hf_panel,
+            size=(280, -1),
+        )
+        self.hf_model.SetHint(
+            'org/model-name or select above',
+        )
+        model_row.Add(self.hf_model,
+                         1, wx.RIGHT, 6)
+        copy_btn = wx.Button(
+            hf_panel,
+            label='Copy',
+            size=(60, -1),
+        )
+        copy_btn.Bind(
+            wx.EVT_BUTTON,
+            self._on_copy,
+        )
         model_row.Add(copy_btn, 0)
         hf.Add(model_row, 0)
-
         hf_panel.SetSizer(hf)
-        self.book.AddPage(hf_panel, 'hf')
-
-        sizer.Add(self.book, 1, wx.EXPAND | wx.LEFT | wx.RIGHT, 16)
-
+        self.book.AddPage(
+            hf_panel, 'hf',
+        )
+        sizer.Add(self.book, 1,
+                   wx.EXPAND
+                    | wx.LEFT | wx.RIGHT, 16)
         btn_row = wx.BoxSizer(wx.HORIZONTAL)
         btn_row.AddStretchSpacer()
-        cancel = wx.Button(self, wx.ID_CANCEL, 'Cancel')
-        ok = wx.Button(self, wx.ID_OK, 'Download')
+        cancel = wx.Button(
+            self,
+            wx.ID_CANCEL,
+            'Cancel',
+        )
+        ok = wx.Button(self,
+                        wx.ID_OK,
+                        'Download')
         ok.SetDefault()
-        btn_row.Add(cancel, 0, wx.RIGHT, 6)
+        btn_row.Add(cancel, 0,
+                      wx.RIGHT, 6)
         btn_row.Add(ok, 0)
-        sizer.Add(btn_row, 0, wx.EXPAND | wx.ALL, 16)
-
+        sizer.Add(btn_row, 0,
+                   wx.EXPAND
+                    | wx.ALL, 16)
         self.SetSizer(sizer)
-        self.provider.Bind(wx.EVT_CHOICE, self._on_provider_change)
+        self.provider.Bind(
+            wx.EVT_CHOICE,
+            self._on_provider_change,
+        )
         self._on_provider_change(None)
 
-    def _on_provider_change(self, event):
+    def _on_provider_change(
+        self, event,
+    ):
         sel = self.provider.GetSelection()
-        self.book.SetSelection(0 if sel == 0 else 1)
+        self.book.SetSelection(
+            0 if sel == 0 else 1,
+        )
         self.Layout()
 
     def _on_search(self, event):
         query = self.hf_query.GetValue().strip()
         if not query:
             return
-        filter_tags = self.hf_filter.GetValue().strip()
+        filter_tags = (
+            self.hf_filter.GetValue().strip()
+        )
         self.hf_list.DeleteAllItems()
-        self.hf_list.InsertItem(0, 'Searching…')
+        self.hf_list.InsertItem(
+            0, 'Searching\u2026',
+        )
 
         def worker():
-            results = llm.search_huggingface_models(query, filter_tags, limit=40)
-            wx.CallAfter(self._update_results, results)
+            results = (
+                llm.search_huggingface_models(
+                    query,
+                    filter_tags,
+                    limit=40,
+                )
+            )
+            wx.CallAfter(
+                self._update_results,
+                results,
+            )
 
-        threading.Thread(target=worker, daemon=True).start()
+        threading.Thread(
+            target=worker,
+            daemon=True,
+        ).start()
 
-    def _update_results(self, results):
+    def _update_results(
+        self,
+        results,
+    ):
         self._hf_results = results
         self._populate_list()
 
     def _populate_list(self):
-        sort_keys = {0: 'id', 1: 'downloads', 2: 'likes', 3: 'size_bytes'}
-        key = sort_keys.get(self._sort_col, 'downloads')
+        sort_keys = {
+            0: 'id',
+            1: 'downloads',
+            2: 'likes',
+            3: 'size_bytes',
+        }
+        key = sort_keys.get(
+            self._sort_col,
+            'downloads',
+        )
         self._hf_results.sort(
-            key=lambda r: r.get(key, 0) if not isinstance(r.get(key, 0), str) else r.get(key, '').lower(),
+            key=lambda r: (
+                r.get(key, 0)
+                if not isinstance(
+                    r.get(key, 0), str
+                )
+                else r.get(key, '').lower(),
+            ),
             reverse=self._sort_rev,
         )
         self.hf_list.DeleteAllItems()
         for r in self._hf_results:
-            size_str = llm._format_bytes(r.get('size_bytes', 0))
-            idx = self.hf_list.InsertItem(self.hf_list.GetItemCount(), r['id'])
-            self.hf_list.SetItem(idx, 1, f'{r["downloads"]:,}')
-            self.hf_list.SetItem(idx, 2, str(r['likes']))
-            self.hf_list.SetItem(idx, 3, size_str)
+            size_str = (
+                llm._format_bytes(
+                    r.get('size_bytes', 0),
+                )
+            )
+            idx = self.hf_list.InsertItem(
+                self.hf_list.GetItemCount(),
+                r['id'],
+            )
+            self.hf_list.SetItem(
+                idx, 1,
+                f'{r["downloads"]:,}',
+            )
+            self.hf_list.SetItem(
+                idx, 2,
+                str(r['likes']),
+            )
+            self.hf_list.SetItem(idx, 3,
+                                  size_str)
 
     def _on_col_click(self, event):
         col = event.GetColumn()
         if self._sort_col == col:
-            self._sort_rev = not self._sort_rev
+            self._sort_rev = (
+                not self._sort_rev
+            )
         else:
             self._sort_col = col
-            self._sort_rev = col != 0  # numeric cols default to descending
+            self._sort_rev = col != 0
         self._populate_list()
 
     def _on_hf_select(self, event):
         idx = event.GetIndex()
-        if 0 <= idx < len(self._hf_results):
-            self.hf_model.SetValue(self._hf_results[idx]['id'])
+        if (
+            0 <= idx
+            < len(self._hf_results)
+        ):
+            self.hf_model.SetValue(
+                self._hf_results[
+                    idx
+                ]['id'],
+            )
 
     def _on_copy(self, event):
         val = self.hf_model.GetValue().strip()
         if val and wx.TheClipboard.Open():
-            wx.TheClipboard.SetData(wx.TextDataObject(val))
+            wx.TheClipboard.SetData(
+                wx.TextDataObject(val),
+            )
             wx.TheClipboard.Close()
 
     def get_values(self):
-        provider = llm.PROVIDERS[self.provider.GetSelection()]
+        provider = (
+            llm.PROVIDERS[
+                self.provider.GetSelection()
+            ]
+        )
         if provider == 'ollama':
-            model = self.ollama_model.GetValue().strip()
+            model = (
+                self.ollama_model.GetValue()
+                .strip()
+            )
         else:
             model = self.hf_model.GetValue().strip()
         return provider, model
@@ -830,39 +1298,142 @@ class DownloadDialog(wx.Dialog):
 # Main frame
 # ---------------------------------------------------------------------------
 
+
 DASHBOARD_VERSION = '1.0.0'
 DOCS_URL = 'https://www.llmwrapper.com'
 
 
 class LlmFrame(wx.Frame):
-    def __init__(self):
-        super().__init__(None, title='LLM Dashboard', size=(960, 680))
-        self.SetBackgroundColour(BG)
-        self.SetMinSize((720, 520))
-        self.Bind(wx.EVT_CLOSE, self._on_close)
 
+    def __init__(self):
+        super().__init__(
+            None,
+            title='LLM Dashboard',
+            size=(960, 680),
+        )
+        self.SetBackgroundColour(tc('bg'))
+        self.SetMinSize((720, 520))
+        self.Bind(
+            wx.EVT_CLOSE,
+            self._on_close,
+        )
+        self._build_ui()
+        self._apply_theme_to_ui()
+        self.CreateStatusBar()
+        self.SetStatusText('Ready')
+        self.SetAcceleratorTable(
+            wx.AcceleratorTable(
+                [
+                    (
+                        wx.ACCEL_CMD,
+                        ord('W'),
+                        wx.ID_CLOSE,
+                    ),
+                    (
+                        wx.ACCEL_CMD,
+                        ord('Q'),
+                        wx.ID_EXIT,
+                    ),
+                ],
+            )
+        )
+        self.Bind(
+            wx.EVT_MENU,
+            lambda e: self.Close(),
+            id=wx.ID_CLOSE,
+        )
+        self.Bind(
+            wx.EVT_MENU,
+            lambda e: self.Close(),
+            id=wx.ID_EXIT,
+        )
+        self.timer = wx.Timer(self)
+        self.Bind(
+            wx.EVT_TIMER,
+            lambda e: self.refresh_status(),
+            self.timer,
+        )
+        self.timer.Start(POLL_MS)
+        self._detect_running_on_startup()
+        self.Centre()
+
+    def _build_ui(self):
+        """Construct the widget tree (called once in __init__)."""
         root = wx.BoxSizer(wx.VERTICAL)
 
+        # --- Header with theme toggle button ---
         header = wx.Panel(self)
-        header.SetBackgroundColour(BG)
+        header.SetBackgroundColour(tc('bg'))
         h = wx.BoxSizer(wx.HORIZONTAL)
-        title = wx.StaticText(header, label='LLM Dashboard')
-        title.SetFont(_font(20, bold=True))
-        title.SetForegroundColour(ACCENT)
-        h.Add(title, 0, wx.ALIGN_CENTER_VERTICAL)
-        tag = wx.StaticText(header, label='   model manager')
-        tag.SetForegroundColour(TEXT_MUTED)
-        h.Add(tag, 0, wx.ALIGN_CENTER_VERTICAL)
+
+        title_st = wx.StaticText(
+            header,
+            label='LLM Dashboard',
+        )
+        title_st.SetFont(
+            _font(20, bold=True),
+        )
+        title_st.SetForegroundColour(
+            tc('accent'),
+        )
+        h.Add(title_st, 0,
+              wx.ALIGN_CENTER_VERTICAL)
+
+        tag = wx.StaticText(
+            header,
+            label='   model manager',
+        )
+        tag.SetForegroundColour(
+            tc('text_muted'),
+        )
+        h.Add(tag, 0,
+              wx.ALIGN_CENTER_VERTICAL)
+
         h.AddStretchSpacer()
+
+        # Theme toggle button (right of title)
+        self._theme_btn = wx.Button(
+            header,
+            label='\u263E\uFE0F',  # half-moon for dark
+            size=(38, 30),
+        )
+        self._theme_btn.SetToolTip(
+            'Toggle light/dark theme',
+        )
+        self._theme_btn.Bind(
+            wx.EVT_BUTTON,
+            self._on_toggle_theme,
+        )
+        h.Add(self._theme_btn, 0,
+              wx.ALIGN_CENTER_VERTICAL
+              | wx.LEFT, 10)
+
         header.SetSizer(h)
-        root.Add(header, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 16)
+        root.Add(
+            header, 0,
+            wx.EXPAND
+            | wx.LEFT
+            | wx.RIGHT | wx.TOP, 16,
+        )
 
-        self.banner = StatusBanner(self, on_stop=self.on_stop, on_refresh=self._manual_refresh)
-        root.Add(self.banner, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 16)
+        # --- Status banner ---
+        self.banner = StatusBanner(
+            self,
+            on_stop=self.on_stop,
+            on_refresh=self._manual_refresh,
+        )
+        root.Add(
+            self.banner, 0,
+            wx.EXPAND
+            | wx.LEFT
+            | wx.RIGHT | wx.TOP, 16,
+        )
 
+        # --- Notebook (tabs) ---
         self.notebook = wx.Notebook(self)
-        self.notebook.SetBackgroundColour(BG)
-
+        self.notebook.SetBackgroundColour(
+            tc('bg'),
+        )
         self.models_tab = ModelsTab(
             self.notebook,
             on_run=self.on_run,
@@ -870,51 +1441,116 @@ class LlmFrame(wx.Frame):
             on_delete=self.on_delete,
             on_download=self.on_download,
         )
-        self.notebook.AddPage(self.models_tab, 'Models')
-
-        self.providers_tab = ProvidersTab(self.notebook)
-        self.notebook.AddPage(self.providers_tab, 'Providers')
-
-        root.Add(self.notebook, 1, wx.EXPAND | wx.ALL, 16)
-
-        self.SetSizer(root)
-        self.CreateStatusBar()
-        self.SetStatusText('Ready')
-
-        self.SetAcceleratorTable(
-            wx.AcceleratorTable(
-                [
-                    (wx.ACCEL_CMD, ord('W'), wx.ID_CLOSE),
-                    (wx.ACCEL_CMD, ord('Q'), wx.ID_EXIT),
-                ]
+        self.notebook.AddPage(
+            self.models_tab,
+            'Models',
+        )
+        self.providers_tab = (
+            ProvidersTab(
+                self.notebook,
             )
         )
-        self.Bind(wx.EVT_MENU, lambda e: self.Close(), id=wx.ID_CLOSE)
-        self.Bind(wx.EVT_MENU, lambda e: self.Close(), id=wx.ID_EXIT)
+        self.notebook.AddPage(
+            self.providers_tab,
+            'Providers',
+        )
+        root.Add(
+            self.notebook, 1,
+            wx.EXPAND | wx.ALL, 16,
+        )
+        self.SetSizer(root)
 
-        self.timer = wx.Timer(self)
-        self.Bind(wx.EVT_TIMER, lambda e: self.refresh_status(), self.timer)
-        self.timer.Start(POLL_MS)
+    def _update_theme_button_label(self):
+        """Refresh the theme button icon for the current mode."""
+        if _THEME.mode == DARK:
+            self._theme_btn.SetLabel('\u2600\uFE0F')  # sun
+        else:
+            self._theme_btn.SetLabel('\u263E\uFE0F')  # moon
 
-        self._detect_running_on_startup()
-        self.Centre()
+    def _on_toggle_theme(self, event):
+        """Switch between light and dark themes."""
+        _THEME.toggle()
+        self._apply_theme_to_ui()
+
+    def _apply_theme_to_ui(self):
+        """Apply the current light/dark theme to all dashboard UI."""
+        theme = _THEME.mode
+
+        # Main frame background
+        self.SetBackgroundColour(tc('bg', theme))
+
+        # Header panel
+        for child in self.GetChildren():
+            if isinstance(child, wx.Panel):
+                if child == self._get_header_panel():
+                    child.SetBackgroundColour(
+                        tc('bg', theme),
+                    )
+                    break
+        if self._get_header_panel():
+            self._get_header_panel().SetBackgroundColour(
+                tc('bg', theme),
+            )
+
+        # Notebook background
+        self.notebook.SetBackgroundColour(
+            tc('bg', theme),
+        )
+
+        # Apply theme to all tabs (panels + notebook pages)
+        self.models_tab.apply_theme()
+        self.providers_tab.apply_theme()
+
+        # Apply to notebook page windows
+        for i in range(self.notebook.GetPageCount()):
+            page = self.notebook.GetPage(i)
+            if hasattr(page, 'SetBackgroundColour'):
+                page.SetBackgroundColour(
+                    tc('bg', theme),
+                )
+
+        # Update theme button icon
+        self._update_theme_button_label()
+        self.Layout()
+
+    def _get_header_panel(self):
+        """Return the header wx.Panel for theme application."""
+        for child in self.GetChildren():
+            # Try to find it by checking title text or position
+            # The header is the first child panel
+            return child
+        return None
 
     def refresh_status(self):
         live = llm.discover_running_models()
         state = llm.read_state()
 
-        # If this dashboard started the process, check whether it has died.
-        if state and not state.get('external') and state.get('pid'):
-            if not llm.is_process_alive(state['pid']):
+        # If this dashboard started the process,
+        # check whether it has died.
+        if (
+            state
+            and not state.get('external')
+            and state.get('pid')
+        ):
+            if not llm.is_process_alive(
+                state['pid'],
+            ):
                 llm.clear_state()
                 state = None
 
         # HTTP endpoints are the ground truth.
         if live:
             entry = live[0]
-            if state and state.get('model') == entry['model']:
+            if (
+                state
+                and state.get('model')
+                == entry['model']
+            ):
                 new_state = dict(state)
-                new_state.update({'external': True, 'pid': None})
+                new_state.update({
+                    'external': True,
+                    'pid': None,
+                })
             else:
                 new_state = {
                     'provider': entry['provider'],
@@ -923,15 +1559,28 @@ class LlmFrame(wx.Frame):
                     'port': entry['port'],
                     'pid': None,
                     'external': True,
-                    'started_at': datetime.now().isoformat(timespec='seconds'),
+                    'started_at': (
+                        datetime.now().isoformat(
+                            timespec='seconds',
+                        )
+                    ),
                 }
             llm.write_state(new_state)
             self.banner.update_status(new_state)
             return
 
-        # Nothing responding via HTTP.  Keep PID state only while the process is
-        # still starting (alive but not yet serving requests).
-        if state and not state.get('external') and state.get('pid') and llm.is_process_alive(state['pid']):
+        # Nothing responding via HTTP.  Keep
+        # PID state only while the process is
+        # still starting (alive but not yet
+        # serving requests).
+        if (
+            state
+            and not state.get('external')
+            and state.get('pid')
+            and llm.is_process_alive(
+                state['pid'],
+            )
+        ):
             self.banner.update_status(state)
             return
 
@@ -945,21 +1594,43 @@ class LlmFrame(wx.Frame):
     def _on_close(self, event):
         self.timer.Stop()
         state = llm.read_state()
-        if state and not state.get('external') and state.get('pid'):
-            if llm.is_process_alive(state['pid']):
-                provider = state.get('provider', 'model')
-                model = state.get('model', '')
+        if (
+            state
+            and not state.get('external')
+            and state.get('pid')
+        ):
+            if llm.is_process_alive(
+                state['pid'],
+            ):
+                provider = (
+                    state.get(
+                        'provider',
+                        'model',
+                    )
+                )
+                model = state.get(
+                    'model', '',
+                )
                 dlg = wx.MessageDialog(
                     self,
-                    f'{provider}  ·  {model} is still running.\n\nStop it before closing?',
+                    f'{provider}  \u00b7  {model}'
+                    f' is still running.\n\n'
+                    f'Stop it before closing?',
                     'Model running',
-                    wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION,
+                    wx.YES_NO
+                    | wx.CANCEL
+                    | wx.ICON_QUESTION,
                 )
-                dlg.SetYesNoLabels('Stop & close', 'Keep running')
+                dlg.SetYesNoLabels(
+                    'Stop & close',
+                    'Keep running',
+                )
                 resp = dlg.ShowModal()
                 dlg.Destroy()
                 if resp == wx.ID_CANCEL:
-                    self.timer.Start(POLL_MS)
+                    self.timer.Start(
+                        POLL_MS,
+                    )
                     event.Veto()
                     return
                 if resp == wx.ID_YES:
@@ -969,58 +1640,126 @@ class LlmFrame(wx.Frame):
     def _detect_running_on_startup(self):
         self.refresh_status()
 
-    def _check_already_running(self) -> bool:
-        """Return True (and show a warning) if a model is already running."""
+    def _check_already_running(self):
+        """Return True if a model is already running."""
         current = llm.read_state()
         if not current:
             return False
         pid = current.get('pid')
-        if (pid and llm.is_process_alive(pid)) or current.get('external'):
+        if (
+            (pid
+             and llm.is_process_alive(pid))
+            or current.get(
+                'external')
+        ):
             wx.MessageBox(
-                f'Already running: {current["provider"]} · {current["model"]}\n'
-                'Stop it first.',
+                (
+                    f'Already running: '
+                    f'{current["provider"]}'
+                    f'  \u00b7  '
+                    f'{current["model"]}\n'
+                    f'Stop it first.'
+                ),
                 'Already running',
-                wx.OK | wx.ICON_WARNING,
+                wx.OK
+                | wx.ICON_WARNING,
             )
             return True
         return False
 
-    def _launch(self, provider, model, host, port, ctx=None, params=None):
+    def _launch(self, provider, model,
+                  host, port, ctx=None,
+                  params=None):
         try:
-            pid = run_detached(provider, model, host, port, ctx, params)
-            self.SetStatusText(f'Started {provider}: {model}  (PID {pid})')
-            wx.CallLater(400, self.refresh_status)
+            pid = run_detached(
+                provider,
+                model,
+                host,
+                port,
+                ctx,
+                params,
+            )
+            self.SetStatusText(
+                f'Started '
+                f'{provider}:'
+                f' {model}'
+                f'  (PID {pid})',
+            )
+            wx.CallLater(
+                400,
+                self.refresh_status,
+            )
         except Exception as e:
-            wx.MessageBox(f'Failed to start: {e}', 'Error', wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(
+                f'Failed to start: {e}',
+                'Error',
+                wx.OK
+                | wx.ICON_ERROR,
+            )
 
     def on_run(self, provider, model):
-        """Run immediately using saved settings (or defaults). No dialog."""
-        if provider not in llm.PROVIDERS and 'mlx' in provider:
+        """Run immediately using saved
+        settings (or defaults)."""
+        if provider not in (
+            llm.PROVIDERS
+        ) and 'mlx' in provider:
             provider = 'mlx-lm'
         if self._check_already_running():
             return
-        saved = llm.get_model_settings(provider, model)
-        host = saved.get('host', llm.DEFAULT_HOST)
-        port = saved.get('port', llm.DEFAULT_PORTS[provider])
-        # Only pass ctx when the user has explicitly saved settings; otherwise
-        # let the provider use its own default to avoid e.g. vllm rejecting a
-        # context size that exceeds the model's training max.
+        saved = llm.get_model_settings(
+            provider, model,
+        )
+        host = saved.get(
+            'host', llm.DEFAULT_HOST,
+        )
+        port = saved.get(
+            'port',
+            llm.DEFAULT_PORTS[provider],
+        )
         ctx = saved.get('ctx')
-        params = saved.get('params', {})
-        self._launch(provider, model, host, port, ctx, params)
+        params = saved.get(
+            'params', {},
+        )
+        self._launch(
+            provider,
+            model,
+            host,
+            port,
+            ctx,
+            params,
+        )
 
     def on_configure(self, provider, model):
-        """Open settings dialog; save settings and launch on confirm."""
-        if provider not in llm.PROVIDERS and 'mlx' in provider:
+        """Open settings dialog; save
+        settings and launch on confirm."""
+        if provider not in (
+            llm.PROVIDERS
+        ) and 'mlx' in provider:
             provider = 'mlx-lm'
-        saved = llm.get_model_settings(provider, model)
-        host_saved = saved.get('host', llm.DEFAULT_HOST)
-        port_saved = saved.get('port', llm.DEFAULT_PORTS[provider])
-        ctx_saved = saved.get('ctx', llm.DEFAULT_CTX)
-        params_saved = saved.get('params', {})
-        if not params_saved and provider == 'ollama':
-            params_saved = llm.get_ollama_model_params(model)
-
+        saved = llm.get_model_settings(
+            provider, model,
+        )
+        host_saved = saved.get(
+            'host', llm.DEFAULT_HOST,
+        )
+        port_saved = saved.get(
+            'port',
+            llm.DEFAULT_PORTS[provider],
+        )
+        ctx_saved = saved.get(
+            'ctx', llm.DEFAULT_CTX,
+        )
+        params_saved = saved.get(
+            'params', {},
+        )
+        if not params_saved and (
+            provider == 'ollama'
+        ):
+            params_saved = (
+                llm.get_ollama_model_params(
+                    model,
+                )
+            )
         dlg = RunDialog(
             self,
             provider_default=provider,
@@ -1030,166 +1769,330 @@ class LlmFrame(wx.Frame):
             ctx_default=ctx_saved,
             params_default=params_saved,
         )
+        dlg._populate_defaults()
         if dlg.ShowModal() != wx.ID_OK:
             dlg.Destroy()
             return
         try:
-            p, m, host, port, ctx, params = dlg.get_values()
+            p, m, host, port, ctx, \
+                params = dlg.get_values()
         except ValueError as e:
             dlg.Destroy()
-            wx.MessageBox(f'Invalid input: {e}', 'Error', wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(
+                f'Invalid input: {e}',
+                'Error',
+                wx.OK
+                | wx.ICON_ERROR,
+            )
             return
         dlg.Destroy()
-
         if not m:
-            wx.MessageBox('Model name required.', 'Error', wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(
+                'Model name required.',
+                'Error',
+                wx.OK
+                | wx.ICON_ERROR,
+            )
             return
-
-        llm.save_model_settings(p, m, host, port, ctx, params)
-
+        llm.save_model_settings(
+            p, m, host, port, ctx, params,
+        )
         if self._check_already_running():
             return
-        self._launch(p, m, host, port, ctx, params)
+        self._launch(
+            p, m, host, port, ctx, params,
+        )
 
     def on_delete(self, provider, model):
         shared_note = ''
-        if provider in ('mlx-lm', 'vllm-mlx'):
+        if provider in (
+            'mlx-lm', 'vllm-mlx',
+        ):
             shared_note = (
-                '\n\nThis removes the shared HuggingFace cache — '
-                'the model will be gone for both mlx-lm and vllm-mlx.'
+                '\n\nThis removes the shared '
+                'HuggingFace cache \u2014  '
+                'the model will be gone '
+                'for both mlx-lm and '
+                'vllm-mlx.'
             )
         dlg = wx.MessageDialog(
             self,
-            f'Permanently delete {model}?{shared_note}',
+            f'Permanently delete '
+            f'{model}?{shared_note}',
             'Confirm delete',
-            wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
+            wx.YES_NO
+            | wx.NO_DEFAULT
+            | wx.ICON_WARNING,
         )
-        confirmed = dlg.ShowModal() == wx.ID_YES
+        confirmed = (
+            dlg.ShowModal()
+            == wx.ID_YES
+        )
         dlg.Destroy()
         if not confirmed:
             return
 
-        success, msg = llm.delete_model(provider, model)
+        success, msg = (
+            llm.delete_model(
+                provider, model,
+            )
+        )
         if success:
             self.SetStatusText(msg)
             self.models_tab.refresh()
         else:
-            wx.MessageBox(msg, 'Delete failed', wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(
+                msg,
+                'Delete failed',
+                wx.OK
+                | wx.ICON_ERROR,
+            )
 
     def on_stop(self):
         success, msg = stop_running()
         self.SetStatusText(msg)
-        wx.CallLater(300, self.refresh_status)
+        wx.CallLater(
+            300,
+            self.refresh_status,
+        )
 
     def on_download(self):
         dlg = DownloadDialog(self)
         if dlg.ShowModal() != wx.ID_OK:
             dlg.Destroy()
             return
-        provider, model = dlg.get_values()
+        provider, model = (
+            dlg.get_values(),
+        )
         dlg.Destroy()
         if not model:
             wx.MessageBox(
-                'Model name required.', 'Error', wx.OK | wx.ICON_ERROR
+                'Model name required.',
+                'Error',
+                wx.OK
+                | wx.ICON_ERROR,
             )
             return
-        self._download(provider, model)
+        self._download(
+            provider, model,
+        )
 
     def _download(self, provider, model):
-        _ANSI = re.compile(r'\x1b\[[0-9;]*[mGKABCDJHfsu]?')
-        _PCT = re.compile(r'(\d+)%\|')
-        _SIZES = re.compile(r'([\d.]+\s*[KMGT]?i?B)\s*/\s*([\d.]+\s*[KMGT]?i?B)')
-        _OLLAMA_PCT = re.compile(r'(\d+)%')
+        _ANSI = re.compile(
+            r'\x1b\[[0-9;]*[mGKABCDJHfsu]?',
+        )
+        _PCT = re.compile(
+            r'(\d+)%\|',
+        )
+        _SIZES = re.compile(
+            r'([\d.]+\s*[KMGT]?i?B)'
+            r'\s*/\s*([\d.]+\s*[KMGT]?i?B)',
+        )
+        _OLLAMA_PCT = re.compile(
+            r'(\d+)%',
+        )
 
         state = {
             'pct': 0,
-            'label': 'Connecting…',
+            'label': 'Connecting\u2026',
             'aborted': False,
             'success': False,
             'error': None,
         }
 
-        # Real wx.Frame — genuinely non-blocking on all platforms.
-        progress = _DownloadProgress(model, on_cancel=lambda: state.update({'aborted': True}))
+        progress = (
+            _DownloadProgress(
+                model,
+                on_cancel=lambda: state.update(
+                    {
+                        'aborted': True,
+                    }
+                ),
+            )
+        )
 
-        def _process_line(line: str, is_ollama: bool) -> None:
-            clean = _ANSI.sub('', line).strip()
+        def _process_line(
+            line, is_ollama,
+        ):
+            clean = _ANSI.sub(
+                '', line,
+            ).strip()
             if not clean:
                 return
             if is_ollama:
-                pm = _OLLAMA_PCT.search(clean)
+                pm = _OLLAMA_PCT.search(
+                    clean,
+                )
                 if pm:
-                    pct = int(pm.group(1))
+                    pct = int(
+                        pm.group(1),
+                    )
                     state['pct'] = pct
-                    state['label'] = f'{pct}%'
+                    state['label'] = (
+                        f'{pct}%'
+                    )
             else:
-                pm = _PCT.search(clean)
+                pm = _PCT.search(
+                    clean,
+                )
                 if pm:
-                    pct = int(pm.group(1))
-                    sm = _SIZES.search(clean)
+                    pct = int(
+                        pm.group(1),
+                    )
+                    sm = _SIZES.search(
+                        clean,
+                    )
                     if sm:
-                        state['label'] = f'{pct}%  ·  {sm.group(1)} / {sm.group(2)}'
+                        state['label'] = (
+                            f'{pct}%  \u00b7  '
+                            f'{sm.group(1)} / '
+                            f'{sm.group(2)}'
+                        )
                     else:
-                        state['label'] = f'{pct}%'
-                    state['pct'] = max(state['pct'], pct)
+                        state['label'] = (
+                            f'{pct}%'
+                        )
+                    state['pct'] = max(
+                        state['pct'],
+                        pct,
+                    )
 
-        def _read_stream(stream, is_ollama: bool) -> None:
+        def _read_stream(
+            stream, is_ollama,
+        ):
             buf = b''
             while True:
-                chunk = stream.read(256)
+                chunk = stream.read(
+                    256,
+                )
                 if not chunk:
                     break
                 buf += chunk
                 while True:
-                    r_pos = buf.find(b'\r')
-                    n_pos = buf.find(b'\n')
-                    if r_pos < 0 and n_pos < 0:
+                    r_pos = (
+                        buf.find(b'\r')
+                    )
+                    n_pos = (
+                        buf.find(b'\n')
+                    )
+                    if (
+                        r_pos < 0
+                        and n_pos < 0
+                    ):
                         break
-                    pos = min(r_pos if r_pos >= 0 else n_pos,
-                              n_pos if n_pos >= 0 else r_pos)
-                    _process_line(buf[:pos].decode('utf-8', errors='replace'), is_ollama)
-                    buf = buf[pos + 1:]
+                    pos = min(
+                        r_pos
+                        if r_pos >= 0
+                        else n_pos,
+                        n_pos
+                        if n_pos >= 0
+                        else r_pos,
+                    )
+                    _process_line(
+                        buf[:pos].decode(
+                            'utf-8',
+                            errors='replace',
+                        ),
+                        is_ollama,
+                    )
+                    buf = buf[
+                        pos + 1:
+                    ]
 
         def worker():
-            is_ollama = provider == 'ollama'
+            is_ollama = (
+                provider == 'ollama'
+            )
             if is_ollama:
-                cmd = ['ollama', 'pull', model]
-                popen_kwargs: dict = {'stdout': subprocess.PIPE, 'stderr': subprocess.DEVNULL}
+                cmd = [
+                    'ollama',
+                    'pull',
+                    model,
+                ]
+                popen_kwargs = {
+                    'stdout': (
+                        subprocess.PIPE,
+                    ),
+                    'stderr': (
+                        subprocess.DEVNULL,
+                    ),
+                }
                 stream_key = 'stdout'
             else:
-                cmd = llm._hf_download_cmd(model)
-                popen_kwargs = {'stdout': subprocess.DEVNULL, 'stderr': subprocess.PIPE}
+                cmd = llm._hf_download_cmd(
+                    model,
+                )
+                popen_kwargs = {
+                    'stdout': (
+                        subprocess.DEVNULL,
+                    ),
+                    'stderr': (
+                        subprocess.PIPE,
+                    ),
+                }
                 stream_key = 'stderr'
             try:
-                proc = subprocess.Popen(cmd, **popen_kwargs)
+                proc = (
+                    subprocess.Popen(
+                        cmd,
+                        **popen_kwargs,
+                    )
+                )
                 reader = threading.Thread(
                     target=_read_stream,
-                    args=(getattr(proc, stream_key), is_ollama),
+                    args=(
+                        getattr(
+                            proc,
+                            stream_key,
+                        ),
+                        is_ollama,
+                    ),
                     daemon=True,
                 )
                 reader.start()
-                while proc.poll() is None:
+                while (
+                    proc.poll()
+                    is None
+                ):
                     if state['aborted']:
                         proc.terminate()
                         proc.wait()
                         return
-                    time.sleep(0.1)
-                reader.join(timeout=2)
+                    time.sleep(
+                        0.1,
+                    )
+                reader.join(
+                    timeout=2,
+                )
                 if proc.returncode == 0:
                     state['success'] = True
                     state['pct'] = 100
-                    state['label'] = f'Downloaded {model}'
+                    state['label'] = (
+                        f'Downloaded '
+                        f'{model}'
+                    )
                 else:
-                    state['error'] = f'Download failed (exit {proc.returncode})'
+                    state['error'] = (
+                        f'Download failed '
+                        f'(exit '
+                        f'{proc.returncode})'
+                    )
             except FileNotFoundError:
-                state['error'] = f'Command not found: {cmd[0]}'
+                state['error'] = (
+                    f'Command not '
+                    f'found: '
+                    f'{cmd[0]}'
+                )
 
-        thread = threading.Thread(target=worker, daemon=True)
+        thread = threading.Thread(
+            target=worker,
+            daemon=True,
+        )
         thread.start()
 
-        # Timer-based polling: lets the wx event loop run normally so the
-        # progress dialog repaints on every tick and the main window stays live.
-        _dl_timer = wx.Timer(self)
+        _dl_timer = wx.Timer(
+            self,
+        )
         _closed = [False]
 
         def _tick(event):
@@ -1198,19 +2101,39 @@ class LlmFrame(wx.Frame):
             if not thread.is_alive():
                 _closed[0] = True
                 _dl_timer.Stop()
-                self.Unbind(wx.EVT_TIMER, source=_dl_timer)
+                self.Unbind(
+                    wx.EVT_TIMER,
+                    source=_dl_timer,
+                )
                 progress.dismiss()
                 if state['aborted']:
-                    self.SetStatusText('Download cancelled.')
+                    self.SetStatusText(
+                        'Download '
+                        'cancelled.',
+                    )
                 elif state['success']:
-                    self.SetStatusText(state['label'])
+                    self.SetStatusText(
+                        state['label'],
+                    )
                     self.models_tab.refresh()
                 elif state['error']:
-                    wx.MessageBox(state['error'], 'Download failed', wx.OK | wx.ICON_ERROR)
+                    wx.MessageBox(
+                        state['error'],
+                        'Download failed',
+                        wx.OK
+                        | wx.ICON_ERROR,
+                    )
                 return
-            progress.update(state['pct'], state['label'])
+            progress.update(
+                state['pct'],
+                state['label'],
+            )
 
-        self.Bind(wx.EVT_TIMER, _tick, _dl_timer)
+        self.Bind(
+            wx.EVT_TIMER,
+            _tick,
+            _dl_timer,
+        )
         _dl_timer.Start(150)
 
 
