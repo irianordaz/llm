@@ -582,7 +582,7 @@ def _build_run_cmd(
         path = _get_provider_path('ollama')
         binary = path if path and Path(path).is_file() else 'ollama'
         # ctx via OLLAMA_NUM_CTX env var; params via custom model name (_get_ollama_custom_model).
-        return [binary, 'run', model] + passthrough, None
+        return [binary, 'run', model, '--keepalive', '-1'] + passthrough, None
 
     def _param_flags(flag_map: dict) -> list[str]:
         flags: list[str] = []
@@ -1142,12 +1142,26 @@ def build_parser() -> argparse.ArgumentParser:
         help='Repetition penalty.',
     )
     run_parser.add_argument(
-        '--presence-penalty',
+         '--presence-penalty',
         dest='presence_penalty',
         type=float,
         default=None,
         metavar='N',
         help='Presence penalty.',
+    )
+    run_parser.add_argument(
+         '--detach',
+        action='store_true',
+        default=False,
+        help='Run the model as a persistent background process that survives CLI exit.',
+    )
+    run_parser.add_argument(
+         '--log',
+        default=None,
+        metavar='PATH',
+        help=(
+            'Log file path for detached runs (default: ~/.llm/logs/run.log).'
+        ),
     )
     run_parser.set_defaults(func=cmd_run)
 
