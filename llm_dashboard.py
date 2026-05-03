@@ -1719,12 +1719,9 @@ class LlmFrame(wx.Frame):
                         state['label'] = (
                             f'{pct}%  \u00b7  {sm.group(1)} / {sm.group(2)}'
                         )
+                        state['pct'] = pct
                     else:
                         state['label'] = f'{pct}%'
-                    state['pct'] = max(
-                        state['pct'],
-                        pct,
-                    )
 
         def _read_stream(
             stream,
@@ -1863,7 +1860,7 @@ class LlmFrame(wx.Frame):
             _tick,
             _dl_timer,
         )
-        _dl_timer.Start(150)
+        _dl_timer.Start(50)
 
 
 def main():
