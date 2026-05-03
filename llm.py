@@ -529,7 +529,26 @@ def search_huggingface_models(
 
 def _hf_download_cmd(model: str) -> list[str]:
     """Return the command to download a HuggingFace model, preferring the newer 'hf' binary."""
-    binary = shutil.which('hf') or shutil.which('huggingface-cli') or 'hf'
+    # GUI/frozen apps inherit a minimal macOS PATH that omits Homebrew and user dirs,
+    # so shutil.which may fail even when the binary exists. Probe known locations.
+    _FALLBACK_DIRS = [
+        '/opt/homebrew/bin',
+        '/usr/local/bin',
+        str(Path.home() / '.local' / 'bin'),
+        str(Path.home() / '.pixi' / 'bin'),
+    ]
+
+    def _find(name: str) -> str | None:
+        found = shutil.which(name)
+        if found:
+            return found
+        for d in _FALLBACK_DIRS:
+            candidate = Path(d) / name
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+        return None
+
+    binary = _find('hf') or _find('huggingface-cli') or 'hf'
     return [binary, 'download', model]
 
 
