@@ -1638,7 +1638,7 @@ class LlmFrame(wx.Frame):
         if dlg.ShowModal() != wx.ID_OK:
             dlg.Destroy()
             return
-        provider, model = (dlg.get_values(),)
+        provider, model = dlg.get_values()
         dlg.Destroy()
         if not model:
             wx.MessageBox(
@@ -1765,8 +1765,8 @@ class LlmFrame(wx.Frame):
                     model,
                 ]
                 popen_kwargs = {
-                    'stdout': (subprocess.PIPE,),
-                    'stderr': (subprocess.DEVNULL,),
+                    'stdout': subprocess.PIPE,
+                    'stderr': subprocess.DEVNULL,
                 }
                 stream_key = 'stdout'
             else:
@@ -1774,8 +1774,8 @@ class LlmFrame(wx.Frame):
                     model,
                 )
                 popen_kwargs = {
-                    'stdout': (subprocess.DEVNULL,),
-                    'stderr': (subprocess.PIPE,),
+                    'stdout': subprocess.DEVNULL,
+                    'stderr': subprocess.PIPE,
                 }
                 stream_key = 'stderr'
             try:
