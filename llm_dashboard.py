@@ -91,6 +91,20 @@ def _style_input(ctrl: wx.Window) -> None:
     ctrl.SetForegroundColour(tc('text'))
 
 
+def _fmt_param_value(val) -> str:
+    """Format a numeric model-parameter value for display. Drops trailing
+    ``.0`` so ``40.0`` shows as ``40``; leaves non-integer floats alone."""
+    if val == '' or val is None:
+        return ''
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return str(val)
+    if f == int(f):
+        return str(int(f))
+    return str(f)
+
+
 # ---------------------------------------------------------------------------
 # Process helpers
 # ---------------------------------------------------------------------------
@@ -837,9 +851,7 @@ class RunDialog(wx.Dialog):
                     pname,
                     '',
                 )
-                field.SetValue(
-                    str(val) if val != '' else '',
-                )
+                field.SetValue(_fmt_param_value(val))
 
     def get_values(self):
         provider = llm.PROVIDERS[self.provider.GetSelection()]
@@ -1528,10 +1540,13 @@ class LlmFrame(wx.Frame):
             'params',
             {},
         )
-        if not params_saved and (provider == 'ollama'):
-            params_saved = llm.get_ollama_model_params(
-                model,
-            )
+        defaults = llm.get_provider_default_params(
+            provider,
+            model,
+        )
+        # Saved values override fetched defaults; defaults fill any gaps so
+        # every supported parameter box shows a value.
+        params_saved = {**defaults, **params_saved}
         dlg = RunDialog(
             self,
             provider_default=provider,

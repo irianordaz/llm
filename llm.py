@@ -66,6 +66,26 @@ VLLM_MLX_PARAM_FLAGS: dict[str, str | None] = {
     'presence_penalty': '--presence-penalty',
 }
 
+# Library-level defaults used by each provider when a parameter is not
+# specified. Surfaced in the dashboard's Model Settings dialog so users see
+# what will actually be applied.
+MLX_LM_DEFAULT_PARAMS: dict[str, float] = {
+    'temperature': 0.0,
+    'top_p': 1.0,
+    'top_k': 0,
+    'min_p': 0.0,
+    'repeat_penalty': 1.0,
+}
+
+VLLM_MLX_DEFAULT_PARAMS: dict[str, float] = {
+    'temperature': 1.0,
+    'top_p': 1.0,
+    'top_k': -1,
+    'min_p': 0.0,
+    'repeat_penalty': 1.0,
+    'presence_penalty': 0.0,
+}
+
 PROVIDER_MODEL_DIRS = {
     'ollama': OLLAMA_MODEL_DIR,
     'mlx-lm': HF_CACHE_DIR,
@@ -430,9 +450,11 @@ def _resolve_provider_model(
 
 def get_ollama_model_params(model: str) -> dict[str, float]:
     """Read default PARAMETER values from an ollama Modelfile."""
+    path = _get_provider_path('ollama')
+    binary = path if path and Path(path).is_file() else 'ollama'
     try:
         result = subprocess.run(
-            ['ollama', 'show', '--modelfile', model],
+            [binary, 'show', '--modelfile', model],
             capture_output=True,
             text=True,
             timeout=10,
@@ -452,6 +474,21 @@ def get_ollama_model_params(model: str) -> dict[str, float]:
         return params
     except Exception:
         return {}
+
+
+def get_provider_default_params(
+    provider: str, model: str
+) -> dict[str, float]:
+    """Default parameter values applied by ``provider`` when a value is not
+    explicitly set. For ollama, these are read from the model's Modelfile;
+    for mlx-lm and vllm-mlx they come from the upstream library defaults."""
+    if provider == 'ollama':
+        return get_ollama_model_params(model)
+    if provider == 'mlx-lm':
+        return dict(MLX_LM_DEFAULT_PARAMS)
+    if provider == 'vllm-mlx':
+        return dict(VLLM_MLX_DEFAULT_PARAMS)
+    return {}
 
 
 def _get_ollama_custom_model(base_model: str, params: dict) -> str:
