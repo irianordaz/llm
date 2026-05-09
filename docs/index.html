@@ -368,7 +368,7 @@
                 max-width: 640px;
                 line-height: 1.65;
             }
-            .provider-pills {
+            .runner-pills {
                 display: flex;
                 flex-wrap: wrap;
                 gap: 0.6rem;
@@ -597,15 +597,15 @@
                 margin: 1.25rem 0;
             }
 
-            /* ── Provider cards ──────────────────────────────────────────── */
-            .prov-card {
+            /* ── Runner cards ────────────────────────────────────────────── */
+            .runner-card {
                 background: var(--bg-card);
                 border: 1px solid var(--border);
                 border-radius: var(--radius);
                 overflow: hidden;
                 box-shadow: var(--shadow);
             }
-            .prov-head {
+            .runner-head {
                 padding: 1rem 1.4rem;
                 display: flex;
                 align-items: center;
@@ -993,7 +993,7 @@
                         <ul class="sub">
                             <li><a href="#install-source">From source</a></li>
                             <li><a href="#install-app">Standalone app</a></li>
-                            <li><a href="#install-providers">Providers</a></li>
+                            <li><a href="#install-runners">Runners</a></li>
                         </ul>
                     </ul>
                 </div>
@@ -1005,13 +1005,13 @@
                         <ul class="sub">
                             <li><a href="#cmd-ls">llm ls</a></li>
                             <li>
-                                <a href="#cmd-provider-info"
-                                    >llm provider info</a
+                                <a href="#cmd-runner-info"
+                                    >llm runner info</a
                                 >
                             </li>
                             <li>
-                                <a href="#cmd-provider-set"
-                                    >llm provider set</a
+                                <a href="#cmd-runner-set"
+                                    >llm runner set</a
                                 >
                             </li>
                             <li><a href="#cmd-download">llm download</a></li>
@@ -1032,7 +1032,7 @@
                         <li><a href="#dashboard-models">Models tab</a></li>
                         <li><a href="#dashboard-download">Download dialog</a></li>
                         <li><a href="#dashboard-status">Status banner</a></li>
-                        <li><a href="#dashboard-providers">Providers tab</a></li>
+                        <li><a href="#dashboard-runners">Runners tab</a></li>
                     </ul>
                 </div>
                 <div class="nav-section">
@@ -1054,11 +1054,11 @@ A unified CLI and GUI wrapper that gives
                               <strong>ollama</strong>, <strong>mlx-lm</strong>,
                             and <strong>vllm-mlx</strong> a consistent
                             interface. One command to run, stop, download, and
-                            inspect models across all three providers. Set a
+                            inspect models across all three runners. Set a
                             default once and <code>llm run</code> always works
                             without arguments.
                         </p>
-                        <div class="provider-pills">
+                        <div class="runner-pills">
                             <span class="pill pill-accent">ollama</span>
                             <span class="pill pill-accent">mlx-lm</span>
                             <span class="pill pill-accent">vllm-mlx</span>
@@ -1169,18 +1169,18 @@ A unified CLI and GUI wrapper that gives
                            </div>
                        </div>
 
-                    <h3 id="install-providers">Provider dependencies</h3>
-                    <p>
-                        Install whichever providers you need separately.
-                        <code>llm provider info</code> shows which are currently
-                        detected.
-                    </p>
+                     <h3 id="install-runners">Runner dependencies</h3>
+                     <p>
+                         Install whichever runners you need separately.
+                         <code>llm runner info</code> shows which are currently
+                         detected.
+                     </p>
                     <div class="tbl-wrap">
                         <table>
                             <thead>
                                 <tr>
-                                    <th>Provider</th>
-                                    <th>Install</th>
+                                     <th>Runner</th>
+                                     <th>Install</th>
                                     <th>Notes</th>
                                 </tr>
                             </thead>
@@ -1221,7 +1221,7 @@ A unified CLI and GUI wrapper that gives
                             <span class="cmd-sig">llm ls</span>
                             <span class="cmd-desc"
                                 >List all locally downloaded models from all
-                                providers.</span
+                                runners.</span
                             >
                         </div>
                         <div class="cmd-row">
@@ -1234,7 +1234,7 @@ A unified CLI and GUI wrapper that gives
                         <div class="cmd-row">
                             <span class="cmd-sig"
                                 >llm run
-                                <span class="arg">[provider model]</span>
+                                <span class="arg">[runner model]</span>
                                 <span class="arg">[--ctx N]</span>
                                 <span class="arg">[--temperature F]</span></span
                             >
@@ -1253,7 +1253,7 @@ A unified CLI and GUI wrapper that gives
                         <div class="cmd-row">
                             <span class="cmd-sig"
                                 >llm default
-                                <span class="arg">[provider model]</span></span
+                                <span class="arg">[runner model]</span></span
                             >
                             <span class="cmd-desc"
                                 >Show the current default, or set a new
@@ -1264,7 +1264,7 @@ A unified CLI and GUI wrapper that gives
                             <span class="cmd-sig"
                                 >llm download
                                 <span class="arg"
-                                    >&lt;provider&gt; &lt;model&gt;</span
+                                    >&lt;runner&gt; &lt;model&gt;</span
                                 ></span
                             >
                             <span class="cmd-desc"
@@ -1276,7 +1276,7 @@ A unified CLI and GUI wrapper that gives
                             <span class="cmd-sig"
                                 >llm rm
                                 <span class="arg"
-                                    >&lt;provider&gt; &lt;model&gt;</span
+                                    >&lt;runner&gt; &lt;model&gt;</span
                                 ></span
                             >
                             <span class="cmd-desc"
@@ -1284,24 +1284,24 @@ A unified CLI and GUI wrapper that gives
                             >
                         </div>
                         <div class="cmd-row">
-                            <span class="cmd-sig">llm provider info</span>
+                             <span class="cmd-sig">llm runner info</span>
                             <span class="cmd-desc"
                                 >Show executables, ports, base URLs, and install
-                                status per provider.</span
+                                status per runner.</span
                             >
                         </div>
-                        <div class="cmd-row">
-                            <span class="cmd-sig"
-                                >llm provider set
-                                <span class="arg"
-                                    >&lt;provider&gt; &lt;path&gt;</span
-                                ></span
-                            >
-                            <span class="cmd-desc"
-                                >Set the executable path or pixi directory for a
-                                provider.</span
-                            >
-                        </div>
+                         <div class="cmd-row">
+                             <span class="cmd-sig"
+                                 >llm runner set
+                                 <span class="arg"
+                                     >&lt;runner&gt; &lt;path&gt;</span
+                                 ></span
+                             >
+                             <span class="cmd-desc"
+                                 >Set the executable path or pixi directory for a
+                                 runner.</span
+                             >
+                         </div>
                     </div>
 
                     <p
@@ -1330,35 +1330,35 @@ A unified CLI and GUI wrapper that gives
                             Scans <strong>ollama</strong> via
                             <code>ollama ls</code> and the HuggingFace cache at
                             <code>~/.cache/huggingface/hub</code>, then prints a
-                            combined table labelled by provider.
+                             combined table labelled by runner.
                         </p>
                          <div class="term">
                              <button class="copy-btn">Copy</button>
-                             <div class="term-body"><code><span class="out">PROVIDER             MODEL</span>&#10;<span class="out">------------------   ----------------------------------------</span>&#10;<span class="hl">ollama</span>               <span class="flag">gemma4:26b</span>&#10;<span class="hl">ollama</span>               <span class="flag">gemma4:31b</span>&#10;<span class="hl">ollama</span>               <span class="flag">qwen3.5:35b</span>&#10;<span class="hl">mlx-lm / vllm-mlx</span>    <span class="flag">mlx-community/Qwen3.6-35B-A3B-nvfp4</span>&#10;<span class="hl">mlx-lm / vllm-mlx</span>    <span class="flag">Qwen/Qwen3.6-27B</span>&#10;<span class="hl">mlx-lm / vllm-mlx</span>    <span class="flag">google/gemma-4-E4B</span></code></div>
+                              <div class="term-body"><code><span class="out">RUNNER             MODEL</span>&#10;<span class="out">------------------   ----------------------------------------</span>&#10;<span class="hl">ollama</span>               <span class="flag">gemma4:26b</span>&#10;<span class="hl">ollama</span>               <span class="flag">gemma4:31b</span>&#10;<span class="hl">ollama</span>               <span class="flag">qwen3.5:35b</span>&#10;<span class="hl">mlx-lm / vllm-mlx</span>    <span class="flag">mlx-community/Qwen3.6-35B-A3B-nvfp4</span>&#10;<span class="hl">mlx-lm / vllm-mlx</span>    <span class="flag">Qwen/Qwen3.6-27B</span>&#10;<span class="hl">mlx-lm / vllm-mlx</span>    <span class="flag">google/gemma-4-E4B</span></code></div>
                          </div>
                         <div class="callout callout-info">
                             <span class="callout-icon">ℹ</span>
                             <div class="callout-body">
                                 HuggingFace models appear under
                                 <strong>mlx-lm / vllm-mlx</strong>
-                                because either provider can load them. Use
-                                <code>llm provider info</code> to see which is
+                                because either runner can load them. Use
+                                <code>llm runner info</code> to see which is
                                 actually installed.
                             </div>
                         </div>
                     </section>
 
-                    <!-- provider info -->
-                    <section id="cmd-provider-info">
-                        <h3>llm provider info</h3>
-                        <p>
-                            Displays the executable path, default port, base
-                            URL, model storage directory, and install status for
-                            every provider.
-                        </p>
+                    <!-- runner info -->
+                     <section id="cmd-runner-info">
+                         <h3>llm runner info</h3>
+                         <p>
+                             Displays the executable path, default port, base
+                             URL, model storage directory, and install status for
+                             every runner.
+                         </p>
                         <div class="card-grid">
-                            <div class="prov-card">
-                                  <div class="prov-head">
+                            <div class="runner-card">
+                                  <div class="runner-head">
                                       <a href="https://ollama.com" target="_blank" style="color: var(--a); text-decoration: none;"><span class="prov-name">ollama</span></a>
                                   </div>
                                 <div class="prov-rows">
@@ -1387,8 +1387,8 @@ A unified CLI and GUI wrapper that gives
                                     </div>
                                 </div>
                             </div>
-                            <div class="prov-card">
-                                  <div class="prov-head">
+                            <div class="runner-card">
+                                  <div class="runner-head">
                                       <a href="https://github.com/ml-explore/mlx-lm" target="_blank" style="color: var(--a); text-decoration: none;"><span class="prov-name">mlx-lm</span></a>
                                   </div>
                                 <div class="prov-rows">
@@ -1417,8 +1417,8 @@ A unified CLI and GUI wrapper that gives
                                     </div>
                                 </div>
                             </div>
-                            <div class="prov-card">
-                                  <div class="prov-head">
+                            <div class="runner-card">
+                                  <div class="runner-head">
                                       <a href="https://github.com/waybarrios/vllm-mlx" target="_blank" style="color: var(--a); text-decoration: none;"><span class="prov-name">vllm-mlx</span></a>
                                   </div>
                                 <div class="prov-rows">
@@ -1450,34 +1450,34 @@ A unified CLI and GUI wrapper that gives
                         </div>
                     </section>
 
-                    <!-- provider set -->
-                    <section id="cmd-provider-set">
-                        <h3>llm provider set</h3>
-                        <p>
-                            Configures the path to a provider executable or pixi
-                            environment directory. The setting is persisted in
-                            <code>~/.llm/config.json</code>.
-                        </p>
-                        <p>
-                            If the path is a
-                            <strong
-                                >directory containing
-                                <code>pixi.toml</code></strong
-                            >, <code>llm</code> invokes the provider with
-                            <code>pixi run</code> from that directory. Otherwise
-                            it is treated as a direct executable.
-                        </p>
+                    <!-- runner set -->
+                     <section id="cmd-runner-set">
+                         <h3>llm runner set</h3>
+                         <p>
+                             Configures the path to a runner executable or pixi
+                             environment directory. The setting is persisted in
+                             <code>~/.llm/config.json</code>.
+                         </p>
+                         <p>
+                             If the path is a
+                             <strong
+                                 >directory containing
+                                 <code>pixi.toml</code></strong
+                             >, <code>llm</code> invokes the runner with
+                             <code>pixi run</code> from that directory. Otherwise
+                             it is treated as a direct executable.
+                         </p>
                           <div class="term">
                               <button class="copy-btn">Copy</button>
-                              <div class="term-body"><code><span class="cmt"># Set the ollama executable (default: /usr/local/bin/ollama)</span>&#10;<span class="cmd">llm provider set</span> ollama /opt/homebrew/bin/ollama&#10;<span class="cmt"># Set the mlx-lm executable (default: /opt/homebrew/bin/mlx_lm)</span>&#10;<span class="cmd">llm provider set</span> mlx-lm /opt/homebrew/bin/mlx_lm&#10;<span class="cmt"># Point vllm-mlx at a pixi environment directory</span>&#10;<span class="cmd">llm provider set</span> vllm-mlx /path/to/vllm-mlx</code></div>
+                              <div class="term-body"><code><span class="cmt"># Set the ollama executable (default: /usr/local/bin/ollama)</span>&#10;<span class="cmd">llm runner set</span> ollama /opt/homebrew/bin/ollama&#10;<span class="cmt"># Set the mlx-lm executable (default: /opt/homebrew/bin/mlx_lm)</span>&#10;<span class="cmd">llm runner set</span> mlx-lm /opt/homebrew/bin/mlx_lm&#10;<span class="cmt"># Point vllm-mlx at a pixi environment directory</span>&#10;<span class="cmd">llm runner set</span> vllm-mlx /path/to/vllm-mlx</code></div>
                           </div>
                         <p>
                             After setting a path,
-                            <code>llm provider info</code> reflects the new
+                            <code>llm runner info</code> reflects the new
                             executable and <code>llm run</code> uses it
-                            immediately. For a pixi-managed provider the info
-                            output shows
-                            <code>pixi run &lt;provider&gt; (cwd: &lt;path&gt;)</code>.
+                             immediately. For a pixi-managed runner the info
+                             output shows
+                             <code>pixi run &lt;runner&gt; (cwd: &lt;path&gt;)</code>.
                         </p>
                     </section>
 
@@ -1486,7 +1486,7 @@ A unified CLI and GUI wrapper that gives
                         <h3>llm download</h3>
                         <p>
                             Downloads a model using the appropriate tool for
-                            each provider. Requires
+                             each runner. Requires
                             <a href="https://ollama.com" target="_blank"
                                 >ollama</a
                             >
@@ -1509,14 +1509,14 @@ A unified CLI and GUI wrapper that gives
                     <section id="cmd-default">
                         <h3>llm default</h3>
                         <p>
-                            Sets the provider and model that bare
+                            Sets the runner and model that bare
                             <code>llm run</code> will use. Configuration is
                             saved to <code>~/.llm/config.json</code>.
                         </p>
                           <div class="term">
                               <button class="copy-btn">Copy</button>
                               <div class="term-body">
-                                  <code><span class="cmt"># Set a default</span>&#10;<span class="cmd">llm default</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># Show the current default</span>&#10;<span class="cmd">llm default</span>&#10;<span class="out">Default provider: mlx-lm</span>&#10;<span class="out">Default model: mlx-community/Llama-3.2-3B-Instruct-4bit</span></code></div>
+                                  <code><span class="cmt"># Set a default</span>&#10;<span class="cmd">llm default</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># Show the current default</span>&#10;<span class="cmd">llm default</span>&#10;<span class="out">Default runner: mlx-lm</span>&#10;<span class="out">Default model: mlx-community/Llama-3.2-3B-Instruct-4bit</span></code></div>
                           </div>
                     </section>
 
@@ -1531,16 +1531,16 @@ A unified CLI and GUI wrapper that gives
                         </p>
                         <p>
                             Any flag not recognised by <code>llm</code> is
-                            forwarded directly to the provider binary, so all
-                            provider-specific options work transparently.
+                             forwarded directly to the runner binary, so all
+                             runner-specific options work transparently.
                         </p>
 
                         <div class="tbl-wrap" style="margin: 1rem 0">
                             <table>
-                                <thead>
-                                    <tr>
-                                        <th>Provider</th>
-                                        <th>Behaviour</th>
+                                 <thead>
+                                     <tr>
+                                         <th>Runner</th>
+                                         <th>Behaviour</th>
                                         <th>Default port</th>
                                     </tr>
                                 </thead>
@@ -1586,8 +1586,8 @@ A unified CLI and GUI wrapper that gives
                                     </tr>
                                     <tr>
                                         <td><code>--port</code></td>
-                                        <td>provider default</td>
-                                        <td>Port number (overrides the provider default)</td>
+                                        <td>runner default</td>
+                                        <td>Port number (overrides the runner default)</td>
                                     </tr>
                                     <tr>
                                         <td><code>--ctx</code></td>
@@ -1601,32 +1601,32 @@ A unified CLI and GUI wrapper that gives
                                     </tr>
                                     <tr>
                                         <td><code>--temperature</code></td>
-                                        <td>provider default</td>
+                                        <td>runner default</td>
                                         <td>Sampling temperature</td>
                                     </tr>
                                     <tr>
                                         <td><code>--top-p</code></td>
-                                        <td>provider default</td>
+                                        <td>runner default</td>
                                         <td>Top-p (nucleus) sampling</td>
                                     </tr>
                                     <tr>
                                         <td><code>--top-k</code></td>
-                                        <td>provider default</td>
+                                        <td>runner default</td>
                                         <td>Top-k sampling</td>
                                     </tr>
                                     <tr>
                                         <td><code>--min-p</code></td>
-                                        <td>provider default</td>
+                                        <td>runner default</td>
                                         <td>Min-p sampling</td>
                                     </tr>
                                     <tr>
                                         <td><code>--repeat-penalty</code></td>
-                                        <td>provider default</td>
+                                        <td>runner default</td>
                                         <td>Repetition penalty</td>
                                     </tr>
                                     <tr>
                                         <td><code>--presence-penalty</code></td>
-                                        <td>provider default</td>
+                                        <td>runner default</td>
                                         <td>Presence penalty (vllm-mlx only)</td>
                                     </tr>
                                 </tbody>
@@ -1636,7 +1636,7 @@ A unified CLI and GUI wrapper that gives
                             <span class="callout-icon">ℹ</span>
                             <div class="callout-body">
                                 Model parameter flags map automatically to the correct
-                                provider-specific CLI option. For <strong>ollama</strong>, a
+                                runner-specific CLI option. For <strong>ollama</strong>, a
                                 temporary custom model is created via <code>ollama create</code>
                                 so that <code>PARAMETER</code> directives can be applied — the
                                 model name is deterministic (SHA-1 hash of the params), making
@@ -1647,7 +1647,7 @@ A unified CLI and GUI wrapper that gives
                           <div class="term">
                               <button class="copy-btn">Copy</button>
                               <div class="term-body">
-                                  <code><span class="cmt"># Run the configured default</span>&#10;<span class="cmd">llm run</span>&#10;<span class="cmt"># Run a specific provider + model</span>&#10;<span class="cmd">llm run</span> ollama llama3.2&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># Override host and port</span>&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit <span class="flag">--host</span> 0.0.0.0 <span class="flag">--port</span> 8081&#10;<span class="cmt"># Set context window and model parameters</span>&#10;<span class="cmd">llm run</span> ollama llama3.2 <span class="flag">--ctx</span> 32768 <span class="flag">--temperature</span> 0.7 <span class="flag">--repeat-penalty</span> 1.1&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \&#10;    <span class="flag">--ctx</span> 32768 <span class="flag">--temperature</span> 0.8 <span class="flag">--top-p</span> 0.9 <span class="flag">--top-k</span> 40&#10;<span class="cmt"># Provider-specific flags are forwarded automatically</span>&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \&#10;    <span class="flag">--port</span> 8080 <span class="flag">--chat-template</span> chatml&#10;<span class="cmd">llm run</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \&#10;    <span class="flag">--port</span> 8080 <span class="flag">--dtype</span> float16 <span class="flag">--presence-penalty</span> 0.5</code></div>
+                                  <code><span class="cmt"># Run the configured default</span>&#10;<span class="cmd">llm run</span>&#10;<span class="cmt"># Run a specific runner + model</span>&#10;<span class="cmd">llm run</span> ollama llama3.2&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># Override host and port</span>&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit <span class="flag">--host</span> 0.0.0.0 <span class="flag">--port</span> 8081&#10;<span class="cmt"># Set context window and model parameters</span>&#10;<span class="cmd">llm run</span> ollama llama3.2 <span class="flag">--ctx</span> 32768 <span class="flag">--temperature</span> 0.7 <span class="flag">--repeat-penalty</span> 1.1&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \&#10;    <span class="flag">--ctx</span> 32768 <span class="flag">--temperature</span> 0.8 <span class="flag">--top-p</span> 0.9 <span class="flag">--top-k</span> 40&#10;<span class="cmt"># Runner-specific flags are forwarded automatically</span>&#10;<span class="cmd">llm run</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \&#10;    <span class="flag">--port</span> 8080 <span class="flag">--chat-template</span> chatml&#10;<span class="cmd">llm run</span> vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \&#10;    <span class="flag">--port</span> 8080 <span class="flag">--dtype</span> float16 <span class="flag">--presence-penalty</span> 0.5</code></div>
                           </div>
                     </section>
 
@@ -1677,7 +1677,7 @@ A unified CLI and GUI wrapper that gives
                             </div>
                             <div class="ps-rows">
                                 <div class="ps-row">
-                                    <span class="ps-k">Provider</span
+                                    <span class="ps-k">Runner</span
                                     ><span class="ps-v">mlx-lm</span>
                                 </div>
                                 <div class="ps-row">
@@ -1751,7 +1751,7 @@ A unified CLI and GUI wrapper that gives
                             <table>
                                 <thead>
                                     <tr>
-                                        <th>Provider</th>
+                                        <th>Runner</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -1762,7 +1762,7 @@ A unified CLI and GUI wrapper that gives
                                     </tr>
                                     <tr>
                                         <td><code>mlx-lm</code> / <code>vllm-mlx</code></td>
-                                        <td>Removes the model directory from the shared HuggingFace cache (<code>~/.cache/huggingface/hub</code>). Deleting via either provider name removes the files for both.</td>
+                                        <td>Removes the model directory from the shared HuggingFace cache (<code>~/.cache/huggingface/hub</code>). Deleting via either runner name removes the files for both.</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1784,7 +1784,7 @@ A unified CLI and GUI wrapper that gives
                     <h3>First-time setup</h3>
                     <div class="term">
                         <button class="copy-btn">Copy</button>
-                        <div class="term-body"><code><span class="cmt"># 1. Check what's installed and what you already have</span>&#10;<span class="cmd">llm provider info</span>&#10;<span class="cmd">llm ls</span>&#10;<span class="cmt"># 2. Download a model</span>&#10;<span class="cmd">llm download</span> ollama llama3.2&#10;<span class="cmd">llm download</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># 3. Set a default so bare 'llm run' always works</span>&#10;<span class="cmd">llm default</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmd">llm default</span> <span class="cmt"># confirm</span>&#10;<span class="cmt"># 4. Run it</span>&#10;<span class="cmd">llm run</span>&#10;<span class="cmt"># 5. Check what's running (in another terminal)</span>&#10;<span class="cmd">llm ps</span>&#10;<span class="cmt"># 6. Stop it</span>&#10;<span class="cmd">llm stop</span></code></div>
+                         <div class="term-body"><code><span class="cmt"># 1. Check what's installed and what you already have</span>&#10;<span class="cmd">llm runner info</span>&#10;<span class="cmd">llm ls</span>&#10;<span class="cmt"># 2. Download a model</span>&#10;<span class="cmd">llm download</span> ollama llama3.2&#10;<span class="cmd">llm download</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmt"># 3. Set a default so bare 'llm run' always works</span>&#10;<span class="cmd">llm default</span> mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit&#10;<span class="cmd">llm default</span> <span class="cmt"># confirm</span>&#10;<span class="cmt"># 4. Run it</span>&#10;<span class="cmd">llm run</span>&#10;<span class="cmt"># 5. Check what's running (in another terminal)</span>&#10;<span class="cmd">llm ps</span>&#10;<span class="cmt"># 6. Stop it</span>&#10;<span class="cmd">llm stop</span></code></div>
                     </div>
 
                     <h3>mlx-lm with custom flags</h3>
@@ -1808,7 +1808,7 @@ A unified CLI and GUI wrapper that gives
                     <h3>Context window length</h3>
                     <p>
                         Use <code>--ctx</code> to set the context window. The default is <code>65000</code>.
-                        The flag maps to the correct provider-specific option automatically.
+                        The flag maps to the correct runner-specific option automatically.
                     </p>
                     <div class="term">
                         <button class="copy-btn">Copy</button>
@@ -1817,7 +1817,7 @@ A unified CLI and GUI wrapper that gives
 
                     <h3>Model parameters</h3>
                     <p>
-                        Sampling parameters are mapped to the correct provider flag automatically.
+                        Sampling parameters are mapped to the correct runner flag automatically.
                         For ollama a temporary custom model is created via <code>ollama create</code>;
                         for mlx-lm and vllm-mlx the flags are passed directly.
                     </p>
@@ -1870,11 +1870,11 @@ A unified CLI and GUI wrapper that gives
                             <h3 class="card-title">Runtime files</h3>
                             <div class="ref-row col">
                                 <span class="ref-val" style="color: var(--a)">~/.llm/state.json</span>
-                                <span class="ref-meta">Active session — provider, model, PID, port, ctx, params</span>
+                                <span class="ref-meta">Active session — runner, model, PID, port, ctx, params</span>
                             </div>
                             <div class="ref-row col" style="margin-top: 0.65rem">
                                 <span class="ref-val" style="color: var(--a)">~/.llm/config.json</span>
-                                <span class="ref-meta">Saved default, provider paths, and per-model settings (host, port, ctx, params)</span>
+                                <span class="ref-meta">Saved default, runner paths, and per-model settings (host, port, ctx, params)</span>
                             </div>
                         </div>
 
@@ -1941,7 +1941,7 @@ A unified CLI and GUI wrapper that gives
                             <rect x="20" y="190" width="100" height="34" rx="10" fill="#f0e8ff" stroke="#dcdcf0" stroke-width="1"/>
                             <line x1="20" y1="223" x2="120" y2="223" stroke="#f0e8ff" stroke-width="2"/>
                             <text x="70" y="212" font-family="system-ui,-apple-system,sans-serif" font-size="13.5" font-weight="600" fill="#7c3aed" text-anchor="middle">Models</text>
-                            <text x="160" y="212" font-family="system-ui,-apple-system,sans-serif" font-size="13.5" fill="#6868a0" text-anchor="middle">Providers</text>
+                            <text x="160" y="212" font-family="system-ui,-apple-system,sans-serif" font-size="13.5" fill="#6868a0" text-anchor="middle">Runners</text>
                             <line x1="20" y1="224" x2="860" y2="224" stroke="#dcdcf0" stroke-width="1"/>
 
                             <!-- Toolbar: label + buttons -->
@@ -1957,7 +1957,7 @@ A unified CLI and GUI wrapper that gives
 
                             <!-- Column headers -->
                             <rect x="20" y="278" width="840" height="30" fill="#f4f4fa"/>
-                            <text x="36" y="297" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="600" fill="#6868a0" letter-spacing="1">PROVIDER</text>
+                            <text x="36" y="297" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="600" fill="#6868a0" letter-spacing="1">RUNNER</text>
                             <text x="208" y="297" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="600" fill="#6868a0" letter-spacing="1">MODEL</text>
                             <text x="708" y="297" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="600" fill="#6868a0" letter-spacing="1">SOURCE</text>
                             <line x1="20" y1="308" x2="860" y2="308" stroke="#dcdcf0" stroke-width="1"/>
@@ -2023,13 +2023,13 @@ A unified CLI and GUI wrapper that gives
                     <section id="dashboard-models">
                         <h3>Models tab</h3>
                         <p>
-                            Lists every locally available model across all providers —
+                            Lists every locally available model across all runners —
                             ollama models and HuggingFace models (shown once for each
-                            provider that can load them).
+                            runner that can load them).
                         </p>
                         <p>The top toolbar contains four buttons: <strong>Run selected</strong>, <strong>Download</strong>, <strong>Delete</strong>, and <strong>Refresh</strong>.</p>
                         <ul>
-                            <li><strong>Single-click + Run selected</strong> — starts the model immediately using saved settings (host, port, context window, model parameters), or provider defaults if none are saved.</li>
+                            <li><strong>Single-click + Run selected</strong> — starts the model immediately using saved settings (host, port, context window, model parameters), or runner defaults if none are saved.</li>
                             <li><strong>Right-click</strong> a model row for a context menu: <em>Run model</em>, <em>Model options</em>, and <em>Delete model</em>.</li>
                             <li><strong>Double-click</strong> (or Model options) — opens the settings dialog. Configure host, port, context window, and model parameters: temperature, top-p, top-k, min-p, repeat penalty, presence penalty. Settings are saved to <code>~/.llm/config.json</code> and reused on every future run.</li>
                             <li><strong>Delete</strong> — permanently removes the selected model (<code>llm rm</code> under the hood). HuggingFace models are removed from the shared cache, deleting them for both mlx-lm and vllm-mlx.</li>
@@ -2054,11 +2054,11 @@ A unified CLI and GUI wrapper that gives
                     <section id="dashboard-status">
                         <h3>Status banner</h3>
                         <p>
-                            Shows the currently running model with its provider, base URL,
+                            Shows the currently running model with its runner, base URL,
                             host:port, PID, and start time. When the model was started with
                             custom parameters, a second detail line shows
                             <code>ctx = N    temperature = N    …</code>.
-                            Updated every 2 seconds by probing the provider's live HTTP endpoint.
+                            Updated every 2 seconds by probing the runner's live HTTP endpoint.
                         </p>
                         <ul>
                             <li><strong>Stop</strong> — terminates the server (sends SIGTERM to the process group; falls back to port-based kill for externally-started models).</li>
@@ -2077,12 +2077,12 @@ A unified CLI and GUI wrapper that gives
                         </div>
                     </section>
 
-                    <section id="dashboard-providers">
-                        <h3>Providers tab</h3>
+                    <section id="dashboard-runners">
+                        <h3>Runners tab</h3>
                         <p>
                             Displays the executable path, default port, base URL,
-                            and model directory for each provider — the same
-                            information as <code>llm provider info</code>.
+                            and model directory for each runner — the same
+                            information as <code>llm runner info</code>.
                         </p>
                     </section>
                 </section>

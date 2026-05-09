@@ -18,7 +18,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-PROVIDERS = ['ollama', 'mlx-lm', 'vllm-mlx']
+RUNNERS = ['ollama', 'mlx-lm', 'vllm-mlx']
 
 DEFAULT_HOST = '127.0.0.1'
 
@@ -66,7 +66,7 @@ VLLM_MLX_PARAM_FLAGS: dict[str, str | None] = {
     'presence_penalty': '--presence-penalty',
 }
 
-# Library-level defaults used by each provider when a parameter is not
+# Library-level defaults used by each runner when a parameter is not
 # specified. Surfaced in the dashboard's Model Settings dialog so users see
 # what will actually be applied.
 MLX_LM_DEFAULT_PARAMS: dict[str, float] = {
@@ -86,13 +86,13 @@ VLLM_MLX_DEFAULT_PARAMS: dict[str, float] = {
     'presence_penalty': 0.0,
 }
 
-PROVIDER_MODEL_DIRS = {
+RUNNER_MODEL_DIRS = {
     'ollama': OLLAMA_MODEL_DIR,
     'mlx-lm': HF_CACHE_DIR,
     'vllm-mlx': HF_CACHE_DIR,
 }
 
-DEFAULT_PROVIDER_PATHS: dict[str, str] = {
+DEFAULT_RUNNER_PATHS: dict[str, str] = {
     'ollama': '/usr/local/bin/ollama',
     'mlx-lm': '/opt/homebrew/bin/mlx_lm',
 }
@@ -105,7 +105,7 @@ HELP_EPILOG = """
 Workflow:
 
   1. Check what is installed and what models you have:
-       llm provider info
+       llm runner info
        llm ls
 
   2. Download a model if needed:
@@ -118,18 +118,18 @@ Workflow:
 
   4. Run and monitor:
        llm run                        # uses configured default
-       llm ps                         # show provider, port, base URL
+       llm ps                         # show runner, port, base URL
        llm stop                       # no arguments needed
 
 Examples:
 
-  Run a specific provider and model:
+  Run a specific runner and model:
     llm run ollama llama3.2
     llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
     llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \\
         --host 0.0.0.0 --port 8081
 
-  Forward provider-specific flags after the standard options:
+  Forward runner-specific flags after the standard options:
     llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \\
         --port 8080 --chat-template chatml --max-tokens 2048
     llm run vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \\
@@ -146,8 +146,8 @@ Model locations:
   vllm-mlx  ~/.cache/huggingface/hub
 
 Runtime files:
-  ~/.llm/state.json   active session  (provider, model, pid, port)
-  ~/.llm/config.json  saved default   (provider, model)
+  ~/.llm/state.json   active session  (runner, model, pid, port)
+  ~/.llm/config.json  saved default   (runner, model)
 """
 
 
@@ -193,13 +193,13 @@ def write_config(config: dict) -> None:
     CONFIG_FILE.write_text(json.dumps(config, indent=2))
 
 
-def _get_provider_path(provider: str) -> str | None:
+def _get_runner_path(runner: str) -> str | None:
     """Return the user-configured path, then the built-in default, then None."""
     config = read_config()
-    configured = config.get('providers', {}).get(provider, {}).get('path')
+    configured = config.get('runners', {}).get(runner, {}).get('path')
     if configured:
         return configured
-    return DEFAULT_PROVIDER_PATHS.get(provider)
+    return DEFAULT_RUNNER_PATHS.get(runner)
 
 
 def _is_pixi_env(path: str) -> bool:
@@ -249,7 +249,7 @@ def _kill_process(pid: int) -> None:
 
 
 def get_ollama_models() -> list[str]:
-    path = _get_provider_path('ollama')
+    path = _get_runner_path('ollama')
     binary = path if path and Path(path).is_file() else 'ollama'
     try:
         result = subprocess.run(
@@ -291,10 +291,10 @@ def get_huggingface_models() -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def delete_model(provider: str, model: str) -> tuple[bool, str]:
+def delete_model(runner: str, model: str) -> tuple[bool, str]:
     """Delete a local model. Returns (success, message)."""
-    if provider == 'ollama':
-        path = _get_provider_path('ollama')
+    if runner == 'ollama':
+        path = _get_runner_path('ollama')
         binary = path if path and Path(path).is_file() else 'ollama'
         try:
             result = subprocess.run(
@@ -310,7 +310,7 @@ def delete_model(provider: str, model: str) -> tuple[bool, str]:
             detail = (err.stderr or err.stdout or str(err)).strip()
             return False, f'ollama rm failed: {detail}'
 
-    if provider in ('mlx-lm', 'vllm-mlx'):
+    if runner in ('mlx-lm', 'vllm-mlx'):
         # "org/model-name" → "models--org--model-name"
         dir_name = 'models--' + model.replace('/', '--')
         model_dir = HF_CACHE_DIR / dir_name
@@ -322,7 +322,7 @@ def delete_model(provider: str, model: str) -> tuple[bool, str]:
         except OSError as err:
             return False, f'Failed to delete {model_dir}: {err}'
 
-    return False, f'Unknown provider: {provider}'
+    return False, f'Unknown runner: {runner}'
 
 
 # ---------------------------------------------------------------------------
@@ -331,9 +331,9 @@ def delete_model(provider: str, model: str) -> tuple[bool, str]:
 
 
 def cmd_rm(args: argparse.Namespace, _: list[str]) -> None:
-    provider = args.provider
+    runner = args.runner
     model = args.model
-    success, msg = delete_model(provider, model)
+    success, msg = delete_model(runner, model)
     if success:
         print(msg)
     else:
@@ -358,15 +358,15 @@ def cmd_ls(args: argparse.Namespace, _: list[str]) -> None:
         print('No local models found.')
         return
 
-    prov_col = max((len(p) for p, _ in rows), default=0)
-    prov_col = max(prov_col, len('PROVIDER'))
+    runner_col = max((len(p) for p, _ in rows), default=0)
+    runner_col = max(runner_col, len('RUNNER'))
     model_col = max((len(m) for _, m in rows), default=0)
     model_col = max(model_col, len('MODEL'))
 
-    print(f'{"PROVIDER":<{prov_col}}  {"MODEL":<{model_col}}')
-    print(f'{"-" * prov_col}  {"-" * model_col}')
-    for provider, model in rows:
-        print(f'{provider:<{prov_col}}  {model:<{model_col}}')
+    print(f'{"RUNNER":<{runner_col}}  {"MODEL":<{model_col}}')
+    print(f'{"-" * runner_col}  {"-" * model_col}')
+    for runner, model in rows:
+        print(f'{runner:<{runner_col}}  {model:<{model_col}}')
 
 
 # ---------------------------------------------------------------------------
@@ -380,22 +380,22 @@ def cmd_ps(args: argparse.Namespace, _: list[str]) -> None:
         print('No model currently running.')
         return
 
-    provider = state.get('provider', 'unknown')
+    runner = state.get('runner', 'unknown')
     model = state.get('model', 'unknown')
     host = state.get('host', DEFAULT_HOST)
-    port = state.get('port', DEFAULT_PORTS.get(provider, '?'))
+    port = state.get('port', DEFAULT_PORTS.get(runner, '?'))
     pid = state.get('pid')
     started_at = state.get('started_at', 'unknown')
 
     running = is_process_alive(pid) if pid else False
     status = 'running' if running else 'stopped (stale state)'
 
-    base_url = BASE_URL_TEMPLATES.get(provider, 'http://{host}:{port}').format(
+    base_url = BASE_URL_TEMPLATES.get(runner, 'http://{host}:{port}').format(
         host=host, port=port
     )
 
     w = 10
-    print(f'{"Provider":<{w}} {provider}')
+    print(f'{"Runner":<{w}} {runner}')
     print(f'{"Model":<{w}} {model}')
     print(f'{"Host":<{w}} {host}')
     print(f'{"Port":<{w}} {port}')
@@ -410,47 +410,47 @@ def cmd_ps(args: argparse.Namespace, _: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_provider_model(
+def _resolve_runner_model(
     args: argparse.Namespace,
 ) -> tuple[str, str]:
-    provider = args.provider
+    runner = args.runner
     model = args.model
 
-    if provider and model:
-        if provider not in PROVIDERS:
+    if runner and model:
+        if runner not in RUNNERS:
             print(
-                f'Error: unknown provider "{provider}". '
-                f'Choose from: {", ".join(PROVIDERS)}',
+                f'Error: unknown runner "{runner}". '
+                f'Choose from: {", ".join(RUNNERS)}',
                 file=sys.stderr,
             )
             sys.exit(1)
-        return provider, model
+        return runner, model
 
-    if provider and not model:
+    if runner and not model:
         print(
-            'Error: a model name is required when a provider is given.',
+            'Error: a model name is required when a runner is given.',
             file=sys.stderr,
         )
         sys.exit(1)
 
     config = read_config()
-    default_provider = config.get('default_provider')
+    default_runner = config.get('default_runner')
     default_model = config.get('default_model')
 
-    if not default_provider or not default_model:
+    if not default_runner or not default_model:
         print(
-            'Error: no provider/model given and no default is configured.\n'
-            'Set one with: llm default <provider> <model>',
+            'Error: no runner/model given and no default is configured.\n'
+            'Set one with: llm default <runner> <model>',
             file=sys.stderr,
         )
         sys.exit(1)
 
-    return default_provider, default_model
+    return default_runner, default_model
 
 
 def get_ollama_model_params(model: str) -> dict[str, float]:
     """Read default PARAMETER values from an ollama Modelfile."""
-    path = _get_provider_path('ollama')
+    path = _get_runner_path('ollama')
     binary = path if path and Path(path).is_file() else 'ollama'
     try:
         result = subprocess.run(
@@ -476,17 +476,17 @@ def get_ollama_model_params(model: str) -> dict[str, float]:
         return {}
 
 
-def get_provider_default_params(
-    provider: str, model: str
+def get_runner_default_params(
+    runner: str, model: str
 ) -> dict[str, float]:
-    """Default parameter values applied by ``provider`` when a value is not
+    """Default parameter values applied by ``runner`` when a value is not
     explicitly set. For ollama, these are read from the model's Modelfile;
     for mlx-lm and vllm-mlx they come from the upstream library defaults."""
-    if provider == 'ollama':
+    if runner == 'ollama':
         return get_ollama_model_params(model)
-    if provider == 'mlx-lm':
+    if runner == 'mlx-lm':
         return dict(MLX_LM_DEFAULT_PARAMS)
-    if provider == 'vllm-mlx':
+    if runner == 'vllm-mlx':
         return dict(VLLM_MLX_DEFAULT_PARAMS)
     return {}
 
@@ -625,7 +625,7 @@ def _python_executable() -> str:
 
 
 def _build_run_cmd(
-    provider: str,
+    runner: str,
     model: str,
     host: str,
     port: int,
@@ -634,8 +634,8 @@ def _build_run_cmd(
     params: dict | None = None,
 ) -> tuple[list[str], str | None]:
     """Return (command, cwd). cwd is set only when a pixi env directory is used."""
-    if provider == 'ollama':
-        path = _get_provider_path('ollama')
+    if runner == 'ollama':
+        path = _get_runner_path('ollama')
         binary = path if path and Path(path).is_file() else 'ollama'
         # ctx via OLLAMA_NUM_CTX env var; params via custom model name (_get_ollama_custom_model).
         return [binary, 'run', model, '--keepalive', '-1'] + passthrough, None
@@ -649,8 +649,8 @@ def _build_run_cmd(
                     flags.extend([flag, str(v)])
         return flags
 
-    if provider == 'mlx-lm':
-        path = _get_provider_path('mlx-lm')
+    if runner == 'mlx-lm':
+        path = _get_runner_path('mlx-lm')
         ctx_flags = ['--max-tokens', str(ctx)] if ctx is not None else []
         if path and Path(path).is_file():
             cmd = [
@@ -679,8 +679,8 @@ def _build_run_cmd(
             MLX_LM_PARAM_FLAGS
         ) + passthrough, None
 
-    if provider == 'vllm-mlx':
-        path = _get_provider_path('vllm-mlx')
+    if runner == 'vllm-mlx':
+        path = _get_runner_path('vllm-mlx')
         ctx_flags = ['--max-model-len', str(ctx)] if ctx is not None else []
         if path and _is_pixi_env(path):
             cmd = [
@@ -702,7 +702,7 @@ def _build_run_cmd(
             VLLM_MLX_PARAM_FLAGS
         ) + passthrough, None
 
-    print(f'Unknown provider: {provider}', file=sys.stderr)
+    print(f'Unknown runner: {runner}', file=sys.stderr)
     sys.exit(1)
 
 
@@ -712,7 +712,7 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
         pid = current.get('pid')
         if pid and is_process_alive(pid):
             print(
-                f'Error: {current["provider"]} is already running '
+                f'Error: {current["runner"]} is already running '
                 f'({current["model"]}).\n'
                 'Stop it first with: llm stop',
                 file=sys.stderr,
@@ -720,10 +720,10 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
             sys.exit(1)
         clear_state()
 
-    provider, model = _resolve_provider_model(args)
+    runner, model = _resolve_runner_model(args)
     host = getattr(args, 'host', DEFAULT_HOST)
     port_arg = getattr(args, 'port', None)
-    port = port_arg if port_arg is not None else DEFAULT_PORTS[provider]
+    port = port_arg if port_arg is not None else DEFAULT_PORTS[runner]
     ctx = getattr(args, 'ctx', DEFAULT_CTX)
 
     params: dict = {}
@@ -733,7 +733,7 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
             params[pname] = val
 
     env = os.environ.copy()
-    if provider == 'ollama':
+    if runner == 'ollama':
         env['OLLAMA_HOST'] = f'{host}:{port}'
         if ctx is not None:
             env['OLLAMA_NUM_CTX'] = str(ctx)
@@ -741,28 +741,28 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
             model = _get_ollama_custom_model(model, params)
 
     cmd, cwd = _build_run_cmd(
-        provider,
+        runner,
         model,
         host,
         port,
         passthrough,
         ctx,
-        params if provider != 'ollama' else None,
+        params if runner != 'ollama' else None,
     )
-    print(f'Starting {provider}: {model}  ({host}:{port})')
+    print(f'Starting {runner}: {model}  ({host}:{port})')
 
     try:
         proc = subprocess.Popen(cmd, env=env, cwd=cwd)
     except FileNotFoundError:
         print(
-            f'Error: {provider} binary not found. Is it installed?',
+            f'Error: {runner} binary not found. Is it installed?',
             file=sys.stderr,
         )
         sys.exit(1)
 
     write_state(
         {
-            'provider': provider,
+            'runner': runner,
             'model': model,
             'host': host,
             'port': port,
@@ -776,7 +776,7 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
     except KeyboardInterrupt:
         proc.terminate()
         proc.wait()
-        print(f'\n{provider} stopped.')
+        print(f'\n{runner} stopped.')
     finally:
         clear_state()
 
@@ -792,7 +792,7 @@ def cmd_stop(args: argparse.Namespace, _: list[str]) -> None:
         print('No running model found.')
         return
 
-    provider = state.get('provider')
+    runner = state.get('runner')
     model = state.get('model')
     pid = state.get('pid')
     port = state.get('port')
@@ -812,8 +812,8 @@ def cmd_stop(args: argparse.Namespace, _: list[str]) -> None:
     else:
         print('No PID or port available to signal.')
 
-    if provider == 'ollama' and model:
-        o_path = _get_provider_path('ollama')
+    if runner == 'ollama' and model:
+        o_path = _get_runner_path('ollama')
         binary = o_path if o_path and Path(o_path).is_file() else 'ollama'
         try:
             subprocess.run(
@@ -824,7 +824,7 @@ def cmd_stop(args: argparse.Namespace, _: list[str]) -> None:
             pass
 
     clear_state()
-    print(f'Stopped {provider}: {model}')
+    print(f'Stopped {runner}: {model}')
 
 
 # ---------------------------------------------------------------------------
@@ -833,38 +833,38 @@ def cmd_stop(args: argparse.Namespace, _: list[str]) -> None:
 
 
 def cmd_default(args: argparse.Namespace, _: list[str]) -> None:
-    provider = args.provider
+    runner = args.runner
     model = args.model
 
-    if not provider and not model:
+    if not runner and not model:
         config = read_config()
-        dp = config.get('default_provider', '(not set)')
+        dp = config.get('default_runner', '(not set)')
         dm = config.get('default_model', '(not set)')
-        print(f'Default provider: {dp}')
+        print(f'Default runner: {dp}')
         print(f'Default model:    {dm}')
         return
 
-    if not provider or not model:
+    if not runner or not model:
         print(
-            'Error: both provider and model are required.\n'
-            'Usage: llm default <provider> <model>',
+            'Error: both runner and model are required.\n'
+            'Usage: llm default <runner> <model>',
             file=sys.stderr,
         )
         sys.exit(1)
 
-    if provider not in PROVIDERS:
+    if runner not in RUNNERS:
         print(
-            f'Error: unknown provider "{provider}". '
-            f'Choose from: {", ".join(PROVIDERS)}',
+            f'Error: unknown runner "{runner}". '
+            f'Choose from: {", ".join(RUNNERS)}',
             file=sys.stderr,
         )
         sys.exit(1)
 
     config = read_config()
-    config['default_provider'] = provider
+    config['default_runner'] = runner
     config['default_model'] = model
     write_config(config)
-    print(f'Default set: {provider} / {model}')
+    print(f'Default set: {runner} / {model}')
 
 
 # ---------------------------------------------------------------------------
@@ -873,11 +873,11 @@ def cmd_default(args: argparse.Namespace, _: list[str]) -> None:
 
 
 def cmd_download(args: argparse.Namespace, _: list[str]) -> None:
-    provider = args.provider
+    runner = args.runner
     model = args.model
 
-    if provider == 'ollama':
-        path = _get_provider_path('ollama')
+    if runner == 'ollama':
+        path = _get_runner_path('ollama')
         binary = path if path and Path(path).is_file() else 'ollama'
         cmd = [binary, 'pull', model]
         missing_hint = 'Install ollama from https://ollama.com'
@@ -887,7 +887,7 @@ def cmd_download(args: argparse.Namespace, _: list[str]) -> None:
             'Install the HuggingFace CLI with: brew install huggingface-cli'
         )
 
-    print(f'Downloading {model} via {provider}...')
+    print(f'Downloading {model} via {runner}...')
     try:
         subprocess.run(cmd, check=True)
     except FileNotFoundError:
@@ -899,29 +899,29 @@ def cmd_download(args: argparse.Namespace, _: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Subcommand: provider info
+# Subcommand: runner info
 # ---------------------------------------------------------------------------
 
 
-def _provider_executable(provider: str) -> tuple[str, bool]:
-    if provider == 'ollama':
-        path = _get_provider_path('ollama')
+def _runner_executable(runner: str) -> tuple[str, bool]:
+    if runner == 'ollama':
+        path = _get_runner_path('ollama')
         if path:
             exists = Path(path).is_file() and os.access(path, os.X_OK)
             return (path, exists)
         fallback = shutil.which('ollama')
         return (fallback, True) if fallback else ('not found', False)
 
-    if provider == 'mlx-lm':
-        path = _get_provider_path('mlx-lm')
+    if runner == 'mlx-lm':
+        path = _get_runner_path('mlx-lm')
         if path:
             exists = Path(path).is_file() and os.access(path, os.X_OK)
             return (path, exists)
         spec = importlib.util.find_spec('mlx_lm')
         return (f'{sys.executable} -m mlx_lm.server', spec is not None)
 
-    if provider == 'vllm-mlx':
-        path = _get_provider_path('vllm-mlx')
+    if runner == 'vllm-mlx':
+        path = _get_runner_path('vllm-mlx')
         if path:
             if _is_pixi_env(path):
                 return (f'pixi run vllm-mlx  (cwd: {path})', True)
@@ -933,14 +933,14 @@ def _provider_executable(provider: str) -> tuple[str, bool]:
     return ('unknown', False)
 
 
-def get_model_settings(provider: str, model: str) -> dict:
+def get_model_settings(runner: str, model: str) -> dict:
     """Return saved host/port for a model, or empty dict if none saved."""
     config = read_config()
-    return config.get('model_settings', {}).get(provider, {}).get(model, {})
+    return config.get('model_settings', {}).get(runner, {}).get(model, {})
 
 
 def save_model_settings(
-    provider: str,
+    runner: str,
     model: str,
     host: str,
     port: int,
@@ -957,13 +957,13 @@ def save_model_settings(
     if params:
         settings['params'] = params
     (
-        config.setdefault('model_settings', {}).setdefault(provider, {})[model]
+        config.setdefault('model_settings', {}).setdefault(runner, {})[model]
     ) = settings
     write_config(config)
 
 
 def discover_running_models() -> list[dict]:
-    """Probe provider endpoints to detect running models started outside llm."""
+    """Probe runner endpoints to detect running models started outside llm."""
     results: list[dict] = []
     queried_ports: set[int] = set()
 
@@ -980,7 +980,7 @@ def discover_running_models() -> list[dict]:
         for model in data.get('models', []):
             results.append(
                 {
-                    'provider': 'ollama',
+                    'runner': 'ollama',
                     'model': model['name'],
                     'host': DEFAULT_HOST,
                     'port': port,
@@ -990,8 +990,8 @@ def discover_running_models() -> list[dict]:
         pass
 
     # Check mlx-lm / vllm-mlx — they may share a port; query each unique port once.
-    for provider in ('mlx-lm', 'vllm-mlx'):
-        port = DEFAULT_PORTS[provider]
+    for runner in ('mlx-lm', 'vllm-mlx'):
+        port = DEFAULT_PORTS[runner]
         if port in queried_ports:
             continue
         queried_ports.add(port)
@@ -1004,7 +1004,7 @@ def discover_running_models() -> list[dict]:
             for model in data.get('data', []):
                 results.append(
                     {
-                        'provider': provider,
+                        'runner': runner,
                         'model': model['id'],
                         'host': DEFAULT_HOST,
                         'port': port,
@@ -1016,20 +1016,20 @@ def discover_running_models() -> list[dict]:
     return results
 
 
-def cmd_provider_info(args: argparse.Namespace, _: list[str]) -> None:
+def cmd_runner_info(args: argparse.Namespace, _: list[str]) -> None:
     w = 12
-    for i, provider in enumerate(PROVIDERS):
+    for i, runner in enumerate(RUNNERS):
         if i > 0:
             print()
-        executable, installed = _provider_executable(provider)
-        port = DEFAULT_PORTS[provider]
-        base_url = BASE_URL_TEMPLATES[provider].format(
+        executable, installed = _runner_executable(runner)
+        port = DEFAULT_PORTS[runner]
+        base_url = BASE_URL_TEMPLATES[runner].format(
             host=DEFAULT_HOST, port=port
         )
-        model_dir = PROVIDER_MODEL_DIRS[provider]
+        model_dir = RUNNER_MODEL_DIRS[runner]
         status = 'installed' if installed else 'not installed'
 
-        print(provider)
+        print(runner)
         print(f'  {"Executable":<{w}}  {executable}')
         print(f'  {"Default port":<{w}}  {port}')
         print(f'  {"Base URL":<{w}}  {base_url}')
@@ -1056,17 +1056,17 @@ def cmd_gui(args: argparse.Namespace, _: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Subcommand: provider set
+# Subcommand: runner set
 # ---------------------------------------------------------------------------
 
 
-def cmd_provider_set(args: argparse.Namespace, _: list[str]) -> None:
-    provider = args.provider
+def cmd_runner_set(args: argparse.Namespace, _: list[str]) -> None:
+    runner = args.runner
     path = args.path
     config = read_config()
-    config.setdefault('providers', {}).setdefault(provider, {})['path'] = path
+    config.setdefault('runners', {}).setdefault(runner, {})['path'] = path
     write_config(config)
-    print(f'Set {provider} path: {path}')
+    print(f'Set {runner} path: {path}')
 
 
 # ---------------------------------------------------------------------------
@@ -1098,7 +1098,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             'Unified wrapper for ollama, mlx-lm, and vllm-mlx.\n'
             'Run any model with a consistent interface across all\n'
-            'three providers. Only one model runs at a time;\n'
+            'three runners. Only one model runs at a time;\n'
             'session state is persisted in ~/.llm/state.json.'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1129,16 +1129,16 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
             'Start a model server or interactive session.\n'
-            'Omit provider and model to run the configured default.\n'
-            'Unknown flags are forwarded directly to the provider binary.\n'
+            'Omit runner and model to run the configured default.\n'
+            'Unknown flags are forwarded directly to the runner binary.\n'
             'Only one model may run at a time.'
         ),
     )
     run_parser.add_argument(
-        'provider',
+        'runner',
         nargs='?',
-        metavar='PROVIDER',
-        help=f'Provider: {", ".join(PROVIDERS)}.',
+        metavar='RUNNER',
+        help=f'Runner: {", ".join(RUNNERS)}.',
     )
     run_parser.add_argument(
         'model',
@@ -1235,17 +1235,17 @@ def build_parser() -> argparse.ArgumentParser:
     # -- default -------------------------------------------------------------
     default_parser = subparsers.add_parser(
         'default',
-        help='Get or set the default provider and model.',
+        help='Get or set the default runner and model.',
         description=(
             'With no arguments, shows the current default.\n'
-            'With provider and model, saves a new default.'
+            'With runner and model, saves a new default.'
         ),
     )
     default_parser.add_argument(
-        'provider',
+        'runner',
         nargs='?',
-        metavar='PROVIDER',
-        help=f'Provider: {", ".join(PROVIDERS)}.',
+        metavar='RUNNER',
+        help=f'Runner: {", ".join(RUNNERS)}.',
     )
     default_parser.add_argument(
         'model',
@@ -1265,9 +1265,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     download_parser.add_argument(
-        'provider',
-        choices=PROVIDERS,
-        help='Provider to download from.',
+        'runner',
+        choices=RUNNERS,
+        help='Runner to download from.',
     )
     download_parser.add_argument(
         'model',
@@ -1285,14 +1285,14 @@ def build_parser() -> argparse.ArgumentParser:
             'For mlx-lm / vllm-mlx, deletes the HuggingFace cache directory\n'
             '(~/.cache/huggingface/hub/models--<org>--<name>).\n'
             'Because mlx-lm and vllm-mlx share the same cache, deleting\n'
-            'via either provider removes it for both.'
+            'via either runner removes it for both.'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     rm_parser.add_argument(
-        'provider',
-        choices=PROVIDERS,
-        help='Provider the model belongs to.',
+        'runner',
+        choices=RUNNERS,
+        help='Runner the model belongs to.',
     )
     rm_parser.add_argument(
         'model',
@@ -1300,57 +1300,57 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rm_parser.set_defaults(func=cmd_rm)
 
-    # -- provider ------------------------------------------------------------
-    provider_parser = subparsers.add_parser(
-        'provider',
-        help='Provider management commands.',
+    # -- runner ------------------------------------------------------------
+    runner_parser = subparsers.add_parser(
+        'runner',
+        help='Runner management commands.',
     )
-    provider_parser.set_defaults(
-        func=lambda args, _: provider_parser.print_help()
+    runner_parser.set_defaults(
+        func=lambda args, _: runner_parser.print_help()
     )
-    provider_sub = provider_parser.add_subparsers(
-        dest='provider_command',
+    runner_sub = runner_parser.add_subparsers(
+        dest='runner_command',
         metavar='SUBCOMMAND',
     )
 
-    info_parser = provider_sub.add_parser(
+    info_parser = runner_sub.add_parser(
         'info',
-        help='Show info for all providers.',
+        help='Show info for all runners.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
             'Displays the executable path, default port, base URL,\n'
-            'and model directory for every provider.'
+            'and model directory for every runner.'
         ),
     )
-    info_parser.set_defaults(func=cmd_provider_info)
+    info_parser.set_defaults(func=cmd_runner_info)
 
-    set_parser = provider_sub.add_parser(
+    set_parser = runner_sub.add_parser(
         'set',
-        help='Set the executable path for a provider.',
+        help='Set the executable path for a runner.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            'Configure the path to a provider executable or directory.\n'
-            'For a pixi-managed provider, set the path to the directory\n'
+            'Configure the path to a runner executable or directory.\n'
+            'For a pixi-managed runner, set the path to the directory\n'
             'containing pixi.toml — llm will invoke it with pixi run.\n\n'
             'Examples:\n'
-            '  llm provider set mlx-lm /opt/homebrew/bin/mlx_lm\n'
-            '  llm provider set vllm-mlx /Users/you/local/vllm-mlx'
+            '  llm runner set mlx-lm /opt/homebrew/bin/mlx_lm\n'
+            '  llm runner set vllm-mlx /Users/you/local/vllm-mlx'
         ),
     )
     set_parser.add_argument(
-        'provider',
-        choices=PROVIDERS,
-        help='Provider to configure.',
+        'runner',
+        choices=RUNNERS,
+        help='Runner to configure.',
     )
     set_parser.add_argument(
         'path',
         metavar='PATH',
         help=(
-            'Path to the provider executable, or to a directory '
-            'containing pixi.toml for pixi-managed providers.'
+            'Path to the runner executable, or to a directory '
+            'containing pixi.toml for pixi-managed runners.'
         ),
     )
-    set_parser.set_defaults(func=cmd_provider_set)
+    set_parser.set_defaults(func=cmd_runner_set)
 
     # -- gui -----------------------------------------------------------------
     gui_parser = subparsers.add_parser(
@@ -1359,7 +1359,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             'Opens a light-themed wxPython window with all CLI features:\n'
             'live status of the running model, model list, run/stop/download,\n'
-            'default selection, and provider configuration.'
+            'default selection, and runner configuration.'
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

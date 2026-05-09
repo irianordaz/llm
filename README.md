@@ -2,7 +2,7 @@
 
 A unified CLI and desktop GUI for **ollama**, **mlx-lm**, and **vllm-mlx**.
 One command to run, stop, download, and inspect models across all three
-providers. Set a default once and `llm run` always works without arguments.
+runners. Set a default once and `llm run` always works without arguments.
 Only one model runs at a time; state is persisted in `~/.llm/`.
 
 > Includes a native macOS Dashboard for visual management — see [Dashboard](#dashboard).
@@ -14,12 +14,12 @@ Only one model runs at a time; state is persisted in `~/.llm/`.
 - [Installation](#installation)
   - [From source](#from-source)
   - [Standalone Dashboard app](#standalone-dashboard-app)
-  - [Provider dependencies](#provider-dependencies)
+  - [Runner dependencies](#runner-dependencies)
 - [Commands](#commands)
 - [Usage](#usage)
   - [`llm ls`](#llm-ls)
-  - [`llm provider info`](#llm-provider-info)
-  - [`llm provider set`](#llm-provider-set)
+  - [`llm runner info`](#llm-runner-info)
+  - [`llm runner set`](#llm-runner-set)
   - [`llm download`](#llm-download)
   - [`llm default`](#llm-default)
   - [`llm run`](#llm-run)
@@ -83,11 +83,11 @@ source ~/.zshrc
 llm --help
 ```
 
-### Provider dependencies
+### Runner dependencies
 
-Install whichever providers you need separately:
+Install whichever runners you need separately:
 
-| Provider   | Install                                 |
+| Runner   | Install                                 |
 | ---------- | --------------------------------------- |
 | ollama     | <https://ollama.com>                    |
 | mlx-lm     | `pip install mlx-lm`                    |
@@ -101,13 +101,13 @@ Install whichever providers you need separately:
 | -------------------------------------- | ------------------------------------------------- |
 | `llm ls`                               | List all locally downloaded models                |
 | `llm ps`                               | Show the currently running model                  |
-| `llm run [provider model] [flags]`     | Start a model (uses default if no args)           |
+| `llm run [runner model] [flags]`     | Start a model (uses default if no args)           |
 | `llm stop`                             | Stop the running model — no args needed           |
-| `llm default [provider model]`         | Show or set the default                           |
-| `llm download <provider> <model>`      | Download a model                                  |
-| `llm rm <provider> <model>`            | Delete a local model                              |
-| `llm provider info`                    | Show provider details                             |
-| `llm provider set <provider> <path>`   | Set the executable path for a provider            |
+| `llm default [runner model]`         | Show or set the default                           |
+| `llm download <runner> <model>`      | Download a model                                  |
+| `llm rm <runner> <model>`            | Delete a local model                              |
+| `llm runner info`                    | Show runner details                             |
+| `llm runner set <runner> <path>`   | Set the executable path for a runner            |
 | `llm gui`                              | Launch the desktop Dashboard *(requires wxPython)*|
 
 Run `llm --help` or `llm <command> --help` for full option details.
@@ -118,10 +118,10 @@ Run `llm --help` or `llm <command> --help` for full option details.
 
 ### `llm ls`
 
-Lists every locally available model, labelled by provider.
+Lists every locally available model, labelled by runner.
 
 ```
-PROVIDER            MODEL
+RUNNER            MODEL
 ------------------  ----------------------------------------
 ollama              llama3.2:latest
 ollama              mistral:latest
@@ -130,12 +130,12 @@ mlx-lm / vllm-mlx   mlx-community/Llama-3.2-3B-Instruct-4bit
 
 - **ollama** models — discovered via `ollama ls` (`~/.ollama/models`)
 - **mlx-lm / vllm-mlx** models — scanned from `~/.cache/huggingface/hub`;
-  either provider can load them
+  either runner can load them
 
-### `llm provider info`
+### `llm runner info`
 
 Shows the executable path, default port, base URL, model directory, and
-install status for every provider.
+install status for every runner.
 
 ```
 ollama
@@ -160,24 +160,24 @@ vllm-mlx
   Status        not installed
 ```
 
-### `llm provider set`
+### `llm runner set`
 
-Configure the path to a provider executable or pixi environment directory.
+Configure the path to a runner executable or pixi environment directory.
 Settings are saved to `~/.llm/config.json`.
 
 If the path is a **directory containing `pixi.toml`**, `llm` invokes the
-provider with `pixi run` from that directory instead of using the system
+runner with `pixi run` from that directory instead of using the system
 Python.
 
 ```bash
 # Set the mlx-lm executable (default is /opt/homebrew/bin/mlx_lm)
-llm provider set mlx-lm /opt/homebrew/bin/mlx_lm
+llm runner set mlx-lm /opt/homebrew/bin/mlx_lm
 
 # Point vllm-mlx at a pixi environment directory
-llm provider set vllm-mlx /path/to/vllm-mlx
+llm runner set vllm-mlx /path/to/vllm-mlx
 ```
 
-After setting a path, `llm provider info` reflects the new executable and
+After setting a path, `llm runner info` reflects the new executable and
 `llm run` uses it immediately.
 
 ### `llm download`
@@ -189,7 +189,7 @@ llm download vllm-mlx mlx-community/Mistral-7B-v0.1-4bit
 ```
 
 Uses `ollama pull` for ollama and the `hf` CLI (falling back to
-`huggingface-cli`) for the HuggingFace providers.
+`huggingface-cli`) for the HuggingFace runners.
 
 ### `llm default`
 
@@ -214,22 +214,22 @@ llm run mlx-lm <model> --host 0.0.0.0 --port 8081
 | Flag                  | Default          | Description                                                                                                          |
 | --------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `--host`              | `127.0.0.1`      | Bind address for the server                                                                                          |
-| `--port`              | provider default | Port number                                                                                                          |
+| `--port`              | runner default | Port number                                                                                                          |
 | `--ctx N`             | `65000`          | Context window length — maps to `--num-ctx` (ollama), `--max-tokens` (mlx-lm), `--max-model-len` (vllm-mlx)          |
-| `--temperature`       | provider default | Sampling temperature                                                                                                 |
-| `--top-p`             | provider default | Top-p (nucleus) sampling                                                                                             |
-| `--top-k`             | provider default | Top-k sampling                                                                                                       |
-| `--min-p`             | provider default | Min-p sampling                                                                                                       |
-| `--repeat-penalty`    | provider default | Repetition penalty                                                                                                   |
-| `--presence-penalty`  | provider default | Presence penalty *(vllm-mlx only)*                                                                                   |
+| `--temperature`       | runner default | Sampling temperature                                                                                                 |
+| `--top-p`             | runner default | Top-p (nucleus) sampling                                                                                             |
+| `--top-k`             | runner default | Top-k sampling                                                                                                       |
+| `--min-p`             | runner default | Min-p sampling                                                                                                       |
+| `--repeat-penalty`    | runner default | Repetition penalty                                                                                                   |
+| `--presence-penalty`  | runner default | Presence penalty *(vllm-mlx only)*                                                                                   |
 
-Model parameter flags map to the correct provider-specific option
+Model parameter flags map to the correct runner-specific option
 automatically. For ollama, a temporary custom model is created via
 `ollama create` so that `PARAMETER` directives can be applied — the model
 name is deterministic based on the parameter set, making repeated runs
 idempotent.
 
-Any flag not recognised by `llm` is forwarded directly to the provider binary:
+Any flag not recognised by `llm` is forwarded directly to the runner binary:
 
 ```bash
 llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \
@@ -256,7 +256,7 @@ llm run vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \
     --temperature 0.6 --presence-penalty 0.5
 ```
 
-#### Provider behaviour
+#### Runner behaviour
 
 - **ollama** — starts an interactive session (`ollama run`)
 - **mlx-lm** — starts an OpenAI-compatible API server
@@ -264,11 +264,11 @@ llm run vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \
 
 ### `llm ps`
 
-Shows the provider, model, host, port, base URL, PID, start time, and
+Shows the runner, model, host, port, base URL, PID, start time, and
 liveness of whatever is currently running.
 
 ```
-Provider   mlx-lm
+Runner   mlx-lm
 Model      mlx-community/Llama-3.2-3B-Instruct-4bit
 Host       127.0.0.1
 Port       8080
@@ -305,7 +305,7 @@ llm rm vllm-mlx mlx-community/Mistral-7B-v0.1-4bit
 - **ollama** — calls `ollama rm <model>`
 - **mlx-lm / vllm-mlx** — removes the model directory from the shared
   HuggingFace cache (`~/.cache/huggingface/hub`). Deleting via either
-  provider name removes the files for both.
+  runner name removes the files for both.
 
 ---
 
@@ -323,7 +323,7 @@ Or double-click `llm.app` if you installed the standalone app.
 
 ### Models tab
 
-Browse every locally available model across all providers. The top toolbar
+Browse every locally available model across all runners. The top toolbar
 contains four buttons: **Run selected**, **Download**, **Delete**, and
 **Refresh**.
 
@@ -341,7 +341,7 @@ for both mlx-lm and vllm-mlx.
 
 ### Status banner
 
-Displays the currently running model with its provider, base URL, host:port,
+Displays the currently running model with its runner, base URL, host:port,
 PID, and start time. When custom parameters are active, a second detail line
 shows them. Updated every 2 seconds by probing the live HTTP endpoint.
 
@@ -349,10 +349,10 @@ shows them. Updated every 2 seconds by probing the live HTTP endpoint.
 - **Refresh** — immediately re-probes live endpoints, bypassing the
   2-second poll interval
 
-### Providers tab
+### Runners tab
 
 Shows the executable path, default port, base URL, and model directory for
-each provider — equivalent to `llm provider info`.
+each runner — equivalent to `llm runner info`.
 
 ### Close behaviour
 
@@ -371,8 +371,8 @@ from the CLI to shut them down.
 ## Examples
 
 ```bash
-# Inspect providers and local models
-llm provider info
+# Inspect runners and local models
+llm runner info
 llm ls
 
 # Download models
@@ -395,7 +395,7 @@ llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \
 # Run ollama on a specific host and port
 llm run ollama llama3.2 --host 0.0.0.0 --port 11434
 
-# Run mlx-lm with provider-specific flags
+# Run mlx-lm with runner-specific flags
 llm run mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit \
     --port 8080 --chat-template chatml
 
@@ -414,7 +414,7 @@ llm rm mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
 
 ### Default ports and base URLs
 
-| Provider   | Port  | Base URL                    |
+| Runner   | Port  | Base URL                    |
 | ---------- | ----- | --------------------------- |
 | ollama     | 11434 | `http://127.0.0.1:11434`    |
 | mlx-lm     | 8080  | `http://127.0.0.1:8080/v1`  |
@@ -422,7 +422,7 @@ llm rm mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
 
 ### Model storage
 
-| Provider   | Location                      |
+| Runner   | Location                      |
 | ---------- | ----------------------------- |
 | ollama     | `~/.ollama/models`            |
 | mlx-lm     | `~/.cache/huggingface/hub`    |
@@ -432,5 +432,5 @@ llm rm mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
 
 | File                  | Purpose                                                                          |
 | --------------------- | -------------------------------------------------------------------------------- |
-| `~/.llm/state.json`   | Active session — provider, model, PID, port, ctx, params                         |
-| `~/.llm/config.json`  | Saved default, provider paths, and per-model settings (host, port, ctx, params)  |
+| `~/.llm/state.json`   | Active session — runner, model, PID, port, ctx, params                         |
+| `~/.llm/config.json`  | Saved default, runner paths, and per-model settings (host, port, ctx, params)  |
