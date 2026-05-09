@@ -111,7 +111,7 @@ def _fmt_param_value(val) -> str:
 
 
 def run_detached(
-    provider: str,
+    runner: str,
     model: str,
     host: str,
     port: int,
@@ -122,19 +122,19 @@ def run_detached(
     if params is None:
         params = {}
     run_model = model
-    if provider == 'ollama' and params:
+    if runner == 'ollama' and params:
         run_model = llm._get_ollama_custom_model(model, params)
     cmd, cwd = llm._build_run_cmd(
-        provider,
+        runner,
         run_model,
         host,
         port,
         [],
         ctx,
-        params if provider != 'ollama' else None,
+        params if runner != 'ollama' else None,
     )
     env = os.environ.copy()
-    if provider == 'ollama':
+    if runner == 'ollama':
         env['OLLAMA_HOST'] = f'{host}:{port}'
         if ctx is not None:
             env['OLLAMA_NUM_CTX'] = str(ctx)
@@ -149,7 +149,7 @@ def run_detached(
     )
     llm.write_state(
         {
-            'provider': provider,
+            'runner': runner,
             'model': model,
             'host': host,
             'port': port,
@@ -167,7 +167,7 @@ def stop_running() -> tuple[bool, str]:
     if not state:
         return False, 'No model is running.'
     pid = state.get('pid')
-    provider = state.get('provider')
+    runner = state.get('runner')
     model = state.get('model')
     port = state.get('port')
     if pid and llm.is_process_alive(pid):
@@ -175,7 +175,7 @@ def stop_running() -> tuple[bool, str]:
     elif port:
         for p in llm._pids_on_port(port):
             llm._kill_process(p)
-    if provider == 'ollama' and model:
+    if runner == 'ollama' and model:
         try:
             subprocess.run(
                 ['ollama', 'stop', model],
@@ -185,7 +185,7 @@ def stop_running() -> tuple[bool, str]:
         except (subprocess.CalledProcessError, FileNotFoundError):
             pass
     llm.clear_state()
-    return True, f'Stopped {provider}: {model}'
+    return True, f'Stopped {runner}: {model}'
 
 
 # ---------------------------------------------------------------------------
@@ -260,18 +260,18 @@ class StatusBanner(wx.Panel):
         elif pid:
             alive = llm.is_process_alive(pid)
 
-        provider = state.get('provider', '?')
+        runner = state.get('runner', '?')
         model = state.get('model', '?')
         host = state.get('host', '127.0.0.1')
         port = state.get('port', '?')
         ctx = state.get('ctx')
         params = state.get('params') or {}
         base_url = llm.BASE_URL_TEMPLATES.get(
-            provider,
+            runner,
             'http://{host}:{port}',
         ).format(host=host, port=port)
 
-        dot_text = f'{provider}  \u00b7  {model}'
+        dot_text = f'{runner}  \u00b7  {model}'
         part_text = '  \u00b7  '.join(
             [
                 base_url,
@@ -460,7 +460,7 @@ class ModelsTab(wx.Panel):
             style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.BORDER_NONE,
         )
         _style_input(self.list)
-        self.list.AppendColumn('Provider', width=160)
+        self.list.AppendColumn('Runner', width=160)
         self.list.AppendColumn('Model', width=420)
         self.list.AppendColumn('Source', width=140)
         self.list.Bind(
@@ -489,10 +489,10 @@ class ModelsTab(wx.Panel):
         rows = [('ollama', m, 'ollama') for m in ollama_models]
         rows += [('mlx-lm', m, 'huggingface') for m in hf_models]
         rows += [('vllm-mlx', m, 'huggingface') for m in hf_models]
-        for provider, model, source in rows:
+        for runner, model, source in rows:
             idx = self.list.InsertItem(
                 self.list.GetItemCount(),
-                provider,
+                runner,
             )
             self.list.SetItem(idx, 1, model)
             self.list.SetItem(idx, 2, source)
@@ -565,11 +565,11 @@ class ModelsTab(wx.Panel):
 
 
 # ---------------------------------------------------------------------------
-# Providers tab
+# Runners tab
 # ---------------------------------------------------------------------------
 
 
-class ProvidersTab(scrolled.ScrolledPanel):
+class RunnersTab(scrolled.ScrolledPanel):
     def __init__(self, parent):
         super().__init__(parent)
         self._build_ui()
@@ -577,7 +577,7 @@ class ProvidersTab(scrolled.ScrolledPanel):
 
     def _build_ui(self):
         sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(_label(self, 'Providers', bold=True, size=14), 0, wx.ALL, 14)
+        sizer.Add(_label(self, 'Runners', bold=True, size=14), 0, wx.ALL, 14)
         self.cards_sizer = wx.BoxSizer(wx.VERTICAL)
         sizer.Add(
             self.cards_sizer,
@@ -592,8 +592,8 @@ class ProvidersTab(scrolled.ScrolledPanel):
 
     def refresh(self):
         self.cards_sizer.Clear(True)
-        for provider in llm.PROVIDERS:
-            card = self._make_card(provider)
+        for runner in llm.RUNNERS:
+            card = self._make_card(runner)
             self.cards_sizer.Add(
                 card,
                 0,
@@ -606,23 +606,23 @@ class ProvidersTab(scrolled.ScrolledPanel):
             scrollToTop=False,
         )
 
-    def _make_card(self, provider):
+    def _make_card(self, runner):
         card = wx.Panel(self)
         card.SetBackgroundColour(tc('card'))
         sizer = wx.BoxSizer(wx.VERTICAL)
         head = wx.BoxSizer(wx.HORIZONTAL)
         head.Add(
-            _label(card, provider, bold=True, size=14),
+            _label(card, runner, bold=True, size=14),
             1,
             wx.ALIGN_CENTER_VERTICAL,
         )
-        executable, _ = llm._provider_executable(provider)
+        executable, _ = llm._runner_executable(runner)
         sizer.Add(head, 0, wx.EXPAND | wx.ALL, 12)
-        port = llm.DEFAULT_PORTS[provider]
-        base_url = llm.BASE_URL_TEMPLATES[provider].format(
+        port = llm.DEFAULT_PORTS[runner]
+        base_url = llm.BASE_URL_TEMPLATES[runner].format(
             host=llm.DEFAULT_HOST, port=port
         )
-        model_dir = llm.PROVIDER_MODEL_DIRS[provider]
+        model_dir = llm.RUNNER_MODEL_DIRS[runner]
         grid = wx.FlexGridSizer(
             rows=4,
             cols=2,
@@ -652,13 +652,13 @@ class ProvidersTab(scrolled.ScrolledPanel):
             wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
             12,
         )
-        if provider in ('ollama', 'mlx-lm', 'vllm-mlx'):
+        if runner in ('ollama', 'mlx-lm', 'vllm-mlx'):
             row = wx.BoxSizer(wx.HORIZONTAL)
             row.AddStretchSpacer()
             btn = wx.Button(card, label='Set path\u2026')
             btn.Bind(
                 wx.EVT_BUTTON,
-                lambda e, p=provider: self._set_path(p),
+                lambda e, p=runner: self._set_path(p),
             )
             row.Add(btn, 0, wx.RIGHT, 12)
             sizer.Add(row, 0, wx.EXPAND | wx.BOTTOM, 8)
@@ -675,7 +675,7 @@ class RunDialog(wx.Dialog):
     def __init__(
         self,
         parent,
-        provider_default='',
+        runner_default='',
         model_default='',
         host_default=None,
         port_default=None,
@@ -690,7 +690,7 @@ class RunDialog(wx.Dialog):
         self.SetBackgroundColour(tc('bg'))
         if params_default is None:
             params_default = {}
-        self._default_provider = provider_default
+        self._default_runner = runner_default
         self._default_model = model_default
         self._default_host = host_default
         self._default_port = port_default
@@ -708,16 +708,16 @@ class RunDialog(wx.Dialog):
         )
         grid.AddGrowableCol(1, 1)
         grid.Add(
-            _label(self, 'Provider', muted=True),
+            _label(self, 'Runner', muted=True),
             0,
             wx.ALIGN_CENTER_VERTICAL,
         )
-        self.provider = wx.Choice(
+        self.runner = wx.Choice(
             self,
-            choices=llm.PROVIDERS,
+            choices=llm.RUNNERS,
         )
-        _style_input(self.provider)
-        grid.Add(self.provider, 0, wx.EXPAND)
+        _style_input(self.runner)
+        grid.Add(self.runner, 0, wx.EXPAND)
         grid.Add(
             _label(self, 'Model', muted=True),
             0,
@@ -755,7 +755,7 @@ class RunDialog(wx.Dialog):
         sizer.Add(
             _label(
                 self,
-                'Model parameters (leave blank for provider default)',
+                'Model parameters (leave blank for runner default)',
                 muted=True,
                 size=10,
             ),
@@ -817,18 +817,18 @@ class RunDialog(wx.Dialog):
 
     def _populate_defaults(self):
         """Fill fields with saved/default values."""
-        if self._default_provider in llm.PROVIDERS:
-            self.provider.SetSelection(
-                llm.PROVIDERS.index(
-                    self._default_provider,
+        if self._default_runner in llm.RUNNERS:
+            self.runner.SetSelection(
+                llm.RUNNERS.index(
+                    self._default_runner,
                 ),
             )
-        elif 'mlx' in self._default_provider:
-            self.provider.SetSelection(
-                llm.PROVIDERS.index('mlx-lm'),
+        elif 'mlx' in self._default_runner:
+            self.runner.SetSelection(
+                llm.RUNNERS.index('mlx-lm'),
             )
         else:
-            self.provider.SetSelection(0)
+            self.runner.SetSelection(0)
         self.model.SetValue(self._default_model)
         self.host.SetValue(
             self._default_host or llm.DEFAULT_HOST,
@@ -854,11 +854,11 @@ class RunDialog(wx.Dialog):
                 field.SetValue(_fmt_param_value(val))
 
     def get_values(self):
-        provider = llm.PROVIDERS[self.provider.GetSelection()]
+        runner = llm.RUNNERS[self.runner.GetSelection()]
         model = self.model.GetValue().strip()
         host = self.host.GetValue().strip() or llm.DEFAULT_HOST
         port_str = self.port.GetValue().strip()
-        port = int(port_str) if port_str else llm.DEFAULT_PORTS[provider]
+        port = int(port_str) if port_str else llm.DEFAULT_PORTS[runner]
         ctx_str = self.ctx.GetValue().strip()
         ctx = int(ctx_str) if ctx_str else None
         params = {}
@@ -876,7 +876,7 @@ class RunDialog(wx.Dialog):
                         )
                 except ValueError:
                     pass
-        return provider, model, host, port, ctx, params
+        return runner, model, host, port, ctx, params
 
 
 class DownloadDialog(wx.Dialog):
@@ -894,21 +894,21 @@ class DownloadDialog(wx.Dialog):
 
     def _build_ui(self):
         sizer = wx.BoxSizer(wx.VERTICAL)
-        prov_row = wx.BoxSizer(wx.HORIZONTAL)
-        prov_row.Add(
-            _label(self, 'Provider', muted=True),
+        runner_row = wx.BoxSizer(wx.HORIZONTAL)
+        runner_row.Add(
+            _label(self, 'Runner', muted=True),
             0,
             wx.ALIGN_CENTER_VERTICAL | wx.RIGHT,
             10,
         )
-        self.provider = wx.Choice(
+        self.runner = wx.Choice(
             self,
-            choices=llm.PROVIDERS,
+            choices=llm.RUNNERS,
         )
-        _style_input(self.provider)
-        self.provider.SetSelection(0)
-        prov_row.Add(self.provider, 0)
-        sizer.Add(prov_row, 0, wx.ALL, 16)
+        _style_input(self.runner)
+        self.runner.SetSelection(0)
+        runner_row.Add(self.runner, 0)
+        sizer.Add(runner_row, 0, wx.ALL, 16)
         self.book = wx.Simplebook(self)
         self.book.SetBackgroundColour(tc('bg'))
 
@@ -1062,17 +1062,17 @@ class DownloadDialog(wx.Dialog):
         btn_row.Add(ok, 0)
         sizer.Add(btn_row, 0, wx.EXPAND | wx.ALL, 16)
         self.SetSizer(sizer)
-        self.provider.Bind(
+        self.runner.Bind(
             wx.EVT_CHOICE,
-            self._on_provider_change,
+            self._on_runner_change,
         )
-        self._on_provider_change(None)
+        self._on_runner_change(None)
 
-    def _on_provider_change(
+    def _on_runner_change(
         self,
         event,
     ):
-        sel = self.provider.GetSelection()
+        sel = self.runner.GetSelection()
         self.book.SetSelection(
             0 if sel == 0 else 1,
         )
@@ -1177,12 +1177,12 @@ class DownloadDialog(wx.Dialog):
             wx.TheClipboard.Close()
 
     def get_values(self):
-        provider = llm.PROVIDERS[self.provider.GetSelection()]
-        if provider == 'ollama':
+        runner = llm.RUNNERS[self.runner.GetSelection()]
+        if runner == 'ollama':
             model = self.ollama_model.GetValue().strip()
         else:
             model = self.hf_model.GetValue().strip()
-        return provider, model
+        return runner, model
 
 
 # ---------------------------------------------------------------------------
@@ -1316,12 +1316,12 @@ class LlmFrame(wx.Frame):
             self.models_tab,
             'Models',
         )
-        self.providers_tab = ProvidersTab(
+        self.runners_tab = RunnersTab(
             self.notebook,
         )
         self.notebook.AddPage(
-            self.providers_tab,
-            'Providers',
+            self.runners_tab,
+            'Runners',
         )
         root.Add(
             self.notebook,
@@ -1357,7 +1357,7 @@ class LlmFrame(wx.Frame):
                 )
             else:
                 new_state = {
-                    'provider': entry['provider'],
+                    'runner': entry['runner'],
                     'model': entry['model'],
                     'host': entry['host'],
                     'port': entry['port'],
@@ -1402,8 +1402,8 @@ class LlmFrame(wx.Frame):
             if llm.is_process_alive(
                 state['pid'],
             ):
-                provider = state.get(
-                    'provider',
+                runner = state.get(
+                    'runner',
                     'model',
                 )
                 model = state.get(
@@ -1412,7 +1412,7 @@ class LlmFrame(wx.Frame):
                 )
                 dlg = wx.MessageDialog(
                     self,
-                    f'{provider}  \u00b7  {model}'
+                    f'{runner}  \u00b7  {model}'
                     f' is still running.\n\n'
                     f'Stop it before closing?',
                     'Model running',
@@ -1447,7 +1447,7 @@ class LlmFrame(wx.Frame):
             wx.MessageBox(
                 (
                     f'Already running: '
-                    f'{current["provider"]}'
+                    f'{current["runner"]}'
                     f'  \u00b7  '
                     f'{current["model"]}\n'
                     f'Stop it first.'
@@ -1458,10 +1458,10 @@ class LlmFrame(wx.Frame):
             return True
         return False
 
-    def _launch(self, provider, model, host, port, ctx=None, params=None):
+    def _launch(self, runner, model, host, port, ctx=None, params=None):
         try:
             pid = run_detached(
-                provider,
+                runner,
                 model,
                 host,
                 port,
@@ -1469,7 +1469,7 @@ class LlmFrame(wx.Frame):
                 params,
             )
             self.SetStatusText(
-                f'Started {provider}: {model}  (PID {pid})',
+                f'Started {runner}: {model}  (PID {pid})',
             )
             wx.CallLater(
                 400,
@@ -1482,15 +1482,15 @@ class LlmFrame(wx.Frame):
                 wx.OK | wx.ICON_ERROR,
             )
 
-    def on_run(self, provider, model):
+    def on_run(self, runner, model):
         """Run immediately using saved
         settings (or defaults)."""
-        if provider not in (llm.PROVIDERS) and 'mlx' in provider:
-            provider = 'mlx-lm'
+        if runner not in (llm.RUNNERS) and 'mlx' in runner:
+            runner = 'mlx-lm'
         if self._check_already_running():
             return
         saved = llm.get_model_settings(
-            provider,
+            runner,
             model,
         )
         host = saved.get(
@@ -1499,7 +1499,7 @@ class LlmFrame(wx.Frame):
         )
         port = saved.get(
             'port',
-            llm.DEFAULT_PORTS[provider],
+            llm.DEFAULT_PORTS[runner],
         )
         ctx = saved.get('ctx')
         params = saved.get(
@@ -1507,7 +1507,7 @@ class LlmFrame(wx.Frame):
             {},
         )
         self._launch(
-            provider,
+            runner,
             model,
             host,
             port,
@@ -1515,13 +1515,13 @@ class LlmFrame(wx.Frame):
             params,
         )
 
-    def on_configure(self, provider, model):
+    def on_configure(self, runner, model):
         """Open settings dialog; save
         settings and launch on confirm."""
-        if provider not in (llm.PROVIDERS) and 'mlx' in provider:
-            provider = 'mlx-lm'
+        if runner not in (llm.RUNNERS) and 'mlx' in runner:
+            runner = 'mlx-lm'
         saved = llm.get_model_settings(
-            provider,
+            runner,
             model,
         )
         host_saved = saved.get(
@@ -1530,7 +1530,7 @@ class LlmFrame(wx.Frame):
         )
         port_saved = saved.get(
             'port',
-            llm.DEFAULT_PORTS[provider],
+            llm.DEFAULT_PORTS[runner],
         )
         ctx_saved = saved.get(
             'ctx',
@@ -1540,8 +1540,8 @@ class LlmFrame(wx.Frame):
             'params',
             {},
         )
-        defaults = llm.get_provider_default_params(
-            provider,
+        defaults = llm.get_runner_default_params(
+            runner,
             model,
         )
         # Saved values override fetched defaults; defaults fill any gaps so
@@ -1549,7 +1549,7 @@ class LlmFrame(wx.Frame):
         params_saved = {**defaults, **params_saved}
         dlg = RunDialog(
             self,
-            provider_default=provider,
+            runner_default=runner,
             model_default=model,
             host_default=host_saved,
             port_default=port_saved,
@@ -1597,9 +1597,9 @@ class LlmFrame(wx.Frame):
             params,
         )
 
-    def on_delete(self, provider, model):
+    def on_delete(self, runner, model):
         shared_note = ''
-        if provider in (
+        if runner in (
             'mlx-lm',
             'vllm-mlx',
         ):
@@ -1622,7 +1622,7 @@ class LlmFrame(wx.Frame):
             return
 
         try:
-            success, msg = llm.delete_model(provider, model)
+            success, msg = llm.delete_model(runner, model)
         except Exception as exc:
             wx.MessageBox(
                 str(exc),
@@ -1653,7 +1653,7 @@ class LlmFrame(wx.Frame):
         if dlg.ShowModal() != wx.ID_OK:
             dlg.Destroy()
             return
-        provider, model = dlg.get_values()
+        runner, model = dlg.get_values()
         dlg.Destroy()
         if not model:
             wx.MessageBox(
@@ -1663,11 +1663,11 @@ class LlmFrame(wx.Frame):
             )
             return
         self._download(
-            provider,
+            runner,
             model,
         )
 
-    def _download(self, provider, model):
+    def _download(self, runner, model):
         _ANSI = re.compile(
             r'\x1b\[[0-9;]*[mGKABCDJHfsu]?',
         )
@@ -1769,7 +1769,7 @@ class LlmFrame(wx.Frame):
                     buf = buf[pos + 1 :]
 
         def worker():
-            is_ollama = provider == 'ollama'
+            is_ollama = runner == 'ollama'
             if is_ollama:
                 cmd = [
                     'ollama',
