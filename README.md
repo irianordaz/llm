@@ -1,9 +1,10 @@
 # llm
 
-A unified CLI and desktop GUI for **ollama**, **mlx-lm**, and **vllm-mlx**.
-One command to run, stop, download, and inspect models across all three
-runners. Set a default once and `llm run` always works without arguments.
-Only one model runs at a time; state is persisted in `~/.llm/`.
+A unified CLI and desktop GUI for **ollama**, **mlx-lm**, **vllm-mlx**,
+**lmstudio**, and **llama.cpp**. One command to run, stop, download, and
+inspect models across every supported runner. Set a default once and
+`llm run` always works without arguments. Only one model runs at a time;
+state is persisted in `~/.llm/`.
 
 > Includes a native macOS Dashboard for visual management — see [Dashboard](#dashboard).
 
@@ -87,11 +88,13 @@ llm --help
 
 Install whichever runners you need separately:
 
-| Runner   | Install                                 |
-| ---------- | --------------------------------------- |
-| ollama     | <https://ollama.com>                    |
-| mlx-lm     | `pip install mlx-lm`                    |
-| vllm-mlx   | `pip install vllm` *(Apple Silicon)*    |
+| Runner    | Install                                              |
+| --------- | ---------------------------------------------------- |
+| ollama    | <https://ollama.com>                                 |
+| mlx-lm    | `pip install mlx-lm`                                 |
+| vllm-mlx  | `pip install vllm` *(Apple Silicon)*                 |
+| lmstudio  | <https://lmstudio.ai> (provides `~/.lmstudio/bin/lms`) |
+| llama.cpp | `brew install llama.cpp` (provides `llama-server`)   |
 
 ---
 
@@ -121,16 +124,22 @@ Run `llm --help` or `llm <command> --help` for full option details.
 Lists every locally available model, labelled by runner.
 
 ```
-RUNNER            MODEL
-------------------  ----------------------------------------
-ollama              llama3.2:latest
-ollama              mistral:latest
-mlx-lm / vllm-mlx   mlx-community/Llama-3.2-3B-Instruct-4bit
+RUNNER             MODEL
+-----------------  --------------------------------------------------
+ollama             llama3.2:latest
+mlx-lm / vllm-mlx  mlx-community/Llama-3.2-3B-Instruct-4bit
+lmstudio           qwen2.5-coder-0.5b-instruct
+llama.cpp          unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf
 ```
 
 - **ollama** models — discovered via `ollama ls` (`~/.ollama/models`)
 - **mlx-lm / vllm-mlx** models — scanned from `~/.cache/huggingface/hub`;
   either runner can load them
+- **lmstudio** models — listed via `lms ls --llm --json`; identified by
+  their LMStudio model key
+- **llama.cpp** models — every `.gguf` file under `~/.cache/llama.cpp`,
+  `~/.lmstudio/models`, or the HuggingFace cache (paths are relative to
+  whichever root they were found in)
 
 ### `llm runner info`
 
@@ -158,6 +167,20 @@ vllm-mlx
   Base URL      http://127.0.0.1:8080/v1
   Model dir     /Users/you/.cache/huggingface/hub
   Status        not installed
+
+lmstudio
+  Executable    /Users/you/.lmstudio/bin/lms
+  Default port  1234
+  Base URL      http://127.0.0.1:1234/v1
+  Model dir     /Users/you/.lmstudio/models
+  Status        installed
+
+llama.cpp
+  Executable    /opt/homebrew/bin/llama-server
+  Default port  8080
+  Base URL      http://127.0.0.1:8080/v1
+  Model dir     /Users/you/.cache/llama.cpp
+  Status        installed
 ```
 
 ### `llm runner set`
@@ -186,10 +209,18 @@ After setting a path, `llm runner info` reflects the new executable and
 llm download ollama llama3.2
 llm download mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
 llm download vllm-mlx mlx-community/Mistral-7B-v0.1-4bit
+llm download lmstudio openai/gpt-oss-20b
+llm download llama.cpp unsloth/Qwen3.5-0.8B-GGUF
 ```
 
-Uses `ollama pull` for ollama and the `hf` CLI (falling back to
-`huggingface-cli`) for the HuggingFace runners.
+- **ollama** uses `ollama pull`
+- **lmstudio** uses `lms get -y <name>` (the same identifier format
+  supported by LMStudio Hub: `org/repo`, optionally `@quant`)
+- **mlx-lm / vllm-mlx / llama.cpp** use the `hf` CLI (falling back to
+  `huggingface-cli`), so models land in `~/.cache/huggingface/hub`. For
+  llama.cpp you can also skip the pre-download and pass a HuggingFace
+  repo straight to `llm run llama.cpp <org/repo>` — `llama-server`'s
+  `-hf` flag will pull on first use.
 
 ### `llm default`
 
@@ -211,17 +242,17 @@ llm run mlx-lm <model> --host 0.0.0.0 --port 8081
 
 #### Flags
 
-| Flag                  | Default          | Description                                                                                                          |
-| --------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `--host`              | `127.0.0.1`      | Bind address for the server                                                                                          |
-| `--port`              | runner default | Port number                                                                                                          |
-| `--ctx N`             | `65000`          | Context window length — maps to `--num-ctx` (ollama), `--max-tokens` (mlx-lm), `--max-model-len` (vllm-mlx)          |
-| `--temperature`       | runner default | Sampling temperature                                                                                                 |
-| `--top-p`             | runner default | Top-p (nucleus) sampling                                                                                             |
-| `--top-k`             | runner default | Top-k sampling                                                                                                       |
-| `--min-p`             | runner default | Min-p sampling                                                                                                       |
-| `--repeat-penalty`    | runner default | Repetition penalty                                                                                                   |
-| `--presence-penalty`  | runner default | Presence penalty *(vllm-mlx only)*                                                                                   |
+| Flag                  | Default          | Description                                                                                                                                       |
+| --------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--host`              | `127.0.0.1`      | Bind address for the server                                                                                                                       |
+| `--port`              | runner default   | Port number                                                                                                                                       |
+| `--ctx N`             | `65000`          | Context window length — maps to `--num-ctx` (ollama), `--max-tokens` (mlx-lm), `--max-model-len` (vllm-mlx), `-c` (lmstudio / llama.cpp)        |
+| `--temperature`       | runner default   | Sampling temperature *(ignored for lmstudio — applied per-request)*                                                                              |
+| `--top-p`             | runner default   | Top-p (nucleus) sampling                                                                                                                          |
+| `--top-k`             | runner default   | Top-k sampling                                                                                                                                    |
+| `--min-p`             | runner default   | Min-p sampling                                                                                                                                    |
+| `--repeat-penalty`    | runner default   | Repetition penalty                                                                                                                                |
+| `--presence-penalty`  | runner default   | Presence penalty *(vllm-mlx and llama.cpp)*                                                                                                       |
 
 Model parameter flags map to the correct runner-specific option
 automatically. For ollama, a temporary custom model is created via
@@ -261,6 +292,14 @@ llm run vllm-mlx mlx-community/Mistral-7B-v0.1-4bit \
 - **ollama** — starts an interactive session (`ollama run`)
 - **mlx-lm** — starts an OpenAI-compatible API server
 - **vllm-mlx** — starts an OpenAI-compatible API server
+- **lmstudio** — talks to the persistent LMStudio daemon: ensures
+  `lms server start` is up, then `lms load <model> -c CTX -y`. The
+  command returns once the model is loaded; the model keeps serving in
+  the background. `llm stop` issues `lms unload <model>` rather than
+  killing the daemon (which would unload every model)
+- **llama.cpp** — starts `llama-server` as a long-running OpenAI-compatible
+  server, with the GGUF either resolved on disk (`-m`) or pulled from
+  HuggingFace (`-hf`)
 
 ### `llm ps`
 
@@ -287,6 +326,9 @@ Stops whichever model is currently running. Reads the state file and:
 - If no PID is stored (model was auto-detected externally) — finds the
   listening process on the saved port via `lsof` and signals it
 - For **ollama** — also calls `ollama stop <model>` to free GPU memory
+- For **lmstudio** — calls `lms unload <model>` so only the active model
+  is freed; the LMStudio daemon (which may host other models) keeps
+  running
 
 ```bash
 llm stop
@@ -300,12 +342,20 @@ Permanently deletes a local model.
 llm rm ollama llama3.2
 llm rm mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
 llm rm vllm-mlx mlx-community/Mistral-7B-v0.1-4bit
+llm rm lmstudio qwen2.5-coder-0.5b-instruct
+llm rm llama.cpp unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf
 ```
 
 - **ollama** — calls `ollama rm <model>`
 - **mlx-lm / vllm-mlx** — removes the model directory from the shared
   HuggingFace cache (`~/.cache/huggingface/hub`). Deleting via either
   runner name removes the files for both.
+- **lmstudio** — looks up the model's on-disk location via
+  `lms ls --json` and removes the containing directory under
+  `~/.lmstudio/models`.
+- **llama.cpp** — deletes the resolved GGUF file. Because files under
+  `~/.lmstudio/models` may also appear in the LMStudio listing, deleting
+  via `llm.cpp` can take a model away from LMStudio too.
 
 ---
 
@@ -414,19 +464,23 @@ llm rm mlx-lm mlx-community/Llama-3.2-3B-Instruct-4bit
 
 ### Default ports and base URLs
 
-| Runner   | Port  | Base URL                    |
-| ---------- | ----- | --------------------------- |
-| ollama     | 11434 | `http://127.0.0.1:11434`    |
-| mlx-lm     | 8080  | `http://127.0.0.1:8080/v1`  |
-| vllm-mlx   | 8080  | `http://127.0.0.1:8080/v1`  |
+| Runner    | Port  | Base URL                   |
+| --------- | ----- | -------------------------- |
+| ollama    | 11434 | `http://127.0.0.1:11434`   |
+| mlx-lm    | 8080  | `http://127.0.0.1:8080/v1` |
+| vllm-mlx  | 8080  | `http://127.0.0.1:8080/v1` |
+| lmstudio  | 1234  | `http://127.0.0.1:1234/v1` |
+| llama.cpp | 8080  | `http://127.0.0.1:8080/v1` |
 
 ### Model storage
 
-| Runner   | Location                      |
-| ---------- | ----------------------------- |
-| ollama     | `~/.ollama/models`            |
-| mlx-lm     | `~/.cache/huggingface/hub`    |
-| vllm-mlx   | `~/.cache/huggingface/hub`    |
+| Runner    | Location                                                          |
+| --------- | ----------------------------------------------------------------- |
+| ollama    | `~/.ollama/models`                                                |
+| mlx-lm    | `~/.cache/huggingface/hub`                                        |
+| vllm-mlx  | `~/.cache/huggingface/hub`                                        |
+| lmstudio  | `~/.lmstudio/models`                                              |
+| llama.cpp | `~/.cache/llama.cpp` (also scans `~/.lmstudio/models` + HF cache) |
 
 ### Runtime files
 

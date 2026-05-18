@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified CLI wrapper for ollama, mlx-lm, and vllm-mlx."""
+"""Unified CLI wrapper for ollama, mlx-lm, vllm-mlx, lmstudio, llama.cpp."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-RUNNERS = ['ollama', 'mlx-lm', 'vllm-mlx']
+RUNNERS = ['ollama', 'mlx-lm', 'vllm-mlx', 'lmstudio', 'llama.cpp']
 
 DEFAULT_HOST = '127.0.0.1'
 
@@ -26,16 +26,32 @@ DEFAULT_PORTS = {
     'ollama': 11434,
     'mlx-lm': 8080,
     'vllm-mlx': 8080,
+    'lmstudio': 1234,
+    'llama.cpp': 8080,
 }
 
 BASE_URL_TEMPLATES = {
     'ollama': 'http://{host}:{port}',
     'mlx-lm': 'http://{host}:{port}/v1',
     'vllm-mlx': 'http://{host}:{port}/v1',
+    'lmstudio': 'http://{host}:{port}/v1',
+    'llama.cpp': 'http://{host}:{port}/v1',
 }
 
 HF_CACHE_DIR = Path.home() / '.cache' / 'huggingface' / 'hub'
 OLLAMA_MODEL_DIR = Path.home() / '.ollama' / 'models'
+LMSTUDIO_MODEL_DIR = Path.home() / '.lmstudio' / 'models'
+LMSTUDIO_BIN = Path.home() / '.lmstudio' / 'bin' / 'lms'
+LLAMACPP_CACHE_DIR = Path.home() / '.cache' / 'llama.cpp'
+
+# llama.cpp scans these roots (in order) for GGUF files when listing or
+# resolving a model name. The HuggingFace cache is included so models pulled
+# with `llama-server -hf` (or `llm download llama.cpp ...`) appear too.
+LLAMACPP_SCAN_ROOTS = [
+    LLAMACPP_CACHE_DIR,
+    LMSTUDIO_MODEL_DIR,
+    HF_CACHE_DIR,
+]
 
 DEFAULT_CTX = 65000
 
@@ -66,6 +82,15 @@ VLLM_MLX_PARAM_FLAGS: dict[str, str | None] = {
     'presence_penalty': '--presence-penalty',
 }
 
+LLAMA_CPP_PARAM_FLAGS: dict[str, str | None] = {
+    'temperature': '--temp',
+    'top_p': '--top-p',
+    'top_k': '--top-k',
+    'min_p': '--min-p',
+    'repeat_penalty': '--repeat-penalty',
+    'presence_penalty': '--presence-penalty',
+}
+
 # Library-level defaults used by each runner when a parameter is not
 # specified. Surfaced in the dashboard's Model Settings dialog so users see
 # what will actually be applied.
@@ -86,15 +111,28 @@ VLLM_MLX_DEFAULT_PARAMS: dict[str, float] = {
     'presence_penalty': 0.0,
 }
 
+LLAMA_CPP_DEFAULT_PARAMS: dict[str, float] = {
+    'temperature': 0.8,
+    'top_p': 0.95,
+    'top_k': 40,
+    'min_p': 0.05,
+    'repeat_penalty': 1.0,
+    'presence_penalty': 0.0,
+}
+
 RUNNER_MODEL_DIRS = {
     'ollama': OLLAMA_MODEL_DIR,
     'mlx-lm': HF_CACHE_DIR,
     'vllm-mlx': HF_CACHE_DIR,
+    'lmstudio': LMSTUDIO_MODEL_DIR,
+    'llama.cpp': LLAMACPP_CACHE_DIR,
 }
 
 DEFAULT_RUNNER_PATHS: dict[str, str] = {
     'ollama': '/usr/local/bin/ollama',
     'mlx-lm': '/opt/homebrew/bin/mlx_lm',
+    'lmstudio': str(LMSTUDIO_BIN),
+    'llama.cpp': '/opt/homebrew/bin/llama-server',
 }
 
 LLM_DIR = Path.home() / '.llm'
@@ -136,14 +174,18 @@ Examples:
         --port 8080 --max-model-len 4096 --dtype float16
 
 Default ports:
-  ollama    11434      base URL: http://127.0.0.1:11434
-  mlx-lm    8080       base URL: http://127.0.0.1:8080/v1
-  vllm-mlx  8080       base URL: http://127.0.0.1:8080/v1
+  ollama     11434     base URL: http://127.0.0.1:11434
+  mlx-lm     8080      base URL: http://127.0.0.1:8080/v1
+  vllm-mlx   8080      base URL: http://127.0.0.1:8080/v1
+  lmstudio   1234      base URL: http://127.0.0.1:1234/v1
+  llama.cpp  8080      base URL: http://127.0.0.1:8080/v1
 
 Model locations:
-  ollama    ~/.ollama/models
-  mlx-lm    ~/.cache/huggingface/hub
-  vllm-mlx  ~/.cache/huggingface/hub
+  ollama     ~/.ollama/models
+  mlx-lm     ~/.cache/huggingface/hub
+  vllm-mlx   ~/.cache/huggingface/hub
+  lmstudio   ~/.lmstudio/models
+  llama.cpp  ~/.cache/llama.cpp     (plus ~/.lmstudio/models, HF cache)
 
 Runtime files:
   ~/.llm/state.json   active session  (runner, model, pid, port)
@@ -286,6 +328,126 @@ def get_huggingface_models() -> list[str]:
     return models
 
 
+def _lmstudio_binary() -> str:
+    path = _get_runner_path('lmstudio')
+    if path and Path(path).is_file():
+        return path
+    fallback = shutil.which('lms')
+    return fallback or str(LMSTUDIO_BIN)
+
+
+def get_lmstudio_models() -> list[str]:
+    """Return LMStudio model identifiers via ``lms ls --llm --json``.
+
+    Falls back to scanning ``~/.lmstudio/models`` when the ``lms`` CLI is
+    unavailable; the resulting names are then publisher/folder paths."""
+    binary = _lmstudio_binary()
+    try:
+        result = subprocess.run(
+            [binary, 'ls', '--llm', '--json'],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        data = json.loads(result.stdout or '[]')
+        return [m['modelKey'] for m in data if m.get('modelKey')]
+    except (
+        FileNotFoundError,
+        subprocess.CalledProcessError,
+        subprocess.TimeoutExpired,
+        json.JSONDecodeError,
+    ):
+        pass
+    if not LMSTUDIO_MODEL_DIR.exists():
+        return []
+    models = []
+    for publisher in sorted(LMSTUDIO_MODEL_DIR.iterdir()):
+        if not publisher.is_dir():
+            continue
+        for entry in sorted(publisher.iterdir()):
+            if entry.is_dir():
+                models.append(f'{publisher.name}/{entry.name}')
+    return models
+
+
+def get_lmstudio_model_info(model_key: str) -> dict | None:
+    """Return the ``lms ls --json`` entry for *model_key*, or None."""
+    binary = _lmstudio_binary()
+    try:
+        result = subprocess.run(
+            [binary, 'ls', '--llm', '--json'],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+        for entry in json.loads(result.stdout or '[]'):
+            if entry.get('modelKey') == model_key:
+                return entry
+    except Exception:
+        return None
+    return None
+
+
+def _llamacpp_iter_ggufs() -> list[tuple[Path, Path]]:
+    """Yield (root, gguf_path) for every .gguf file under known roots."""
+    out: list[tuple[Path, Path]] = []
+    seen: set[Path] = set()
+    for root in LLAMACPP_SCAN_ROOTS:
+        if not root.exists():
+            continue
+        for gguf in root.rglob('*.gguf'):
+            try:
+                resolved = gguf.resolve()
+            except OSError:
+                resolved = gguf
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            # Multimodal projection files aren't standalone models.
+            if gguf.name.startswith('mmproj-'):
+                continue
+            out.append((root, gguf))
+    return out
+
+
+def get_llamacpp_models() -> list[str]:
+    """Return GGUF files (as paths relative to their scan root)."""
+    rows = _llamacpp_iter_ggufs()
+    names: list[str] = []
+    seen: set[str] = set()
+    for root, gguf in rows:
+        try:
+            rel = str(gguf.relative_to(root))
+        except ValueError:
+            rel = str(gguf)
+        if rel in seen:
+            continue
+        seen.add(rel)
+        names.append(rel)
+    names.sort()
+    return names
+
+
+def resolve_llamacpp_model_path(model: str) -> Path | None:
+    """Resolve a llama.cpp model identifier to an absolute GGUF path.
+
+    Accepts: absolute paths, paths relative to a known scan root, or bare
+    filenames matched anywhere under the roots."""
+    p = Path(model).expanduser()
+    if p.is_absolute() and p.is_file():
+        return p
+    for root in LLAMACPP_SCAN_ROOTS:
+        candidate = root / model
+        if candidate.is_file():
+            return candidate
+    for _, gguf in _llamacpp_iter_ggufs():
+        if gguf.name == model:
+            return gguf
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Model deletion
 # ---------------------------------------------------------------------------
@@ -322,6 +484,44 @@ def delete_model(runner: str, model: str) -> tuple[bool, str]:
         except OSError as err:
             return False, f'Failed to delete {model_dir}: {err}'
 
+    if runner == 'lmstudio':
+        info = get_lmstudio_model_info(model)
+        # info['path'] may be either "publisher/dir" (mlx) or
+        # "publisher/dir/file.gguf" (gguf). Delete the model directory
+        # in both cases so all weights/config files go together.
+        if info and info.get('path'):
+            target = LMSTUDIO_MODEL_DIR / info['path']
+            if target.is_file():
+                target = target.parent
+            if not target.exists():
+                return False, f'Path not found: {target}'
+            try:
+                shutil.rmtree(target)
+                return True, f'Deleted lmstudio model: {model}'
+            except OSError as err:
+                return False, f'Failed to delete {target}: {err}'
+        # Fallback: treat the identifier itself as a relative path.
+        target = LMSTUDIO_MODEL_DIR / model
+        if target.is_file():
+            target = target.parent
+        if not target.exists():
+            return False, f'LMStudio model not found: {model}'
+        try:
+            shutil.rmtree(target)
+            return True, f'Deleted lmstudio model: {model}'
+        except OSError as err:
+            return False, f'Failed to delete {target}: {err}'
+
+    if runner == 'llama.cpp':
+        gguf = resolve_llamacpp_model_path(model)
+        if not gguf:
+            return False, f'GGUF file not found: {model}'
+        try:
+            gguf.unlink()
+            return True, f'Deleted {gguf}'
+        except OSError as err:
+            return False, f'Failed to delete {gguf}: {err}'
+
     return False, f'Unknown runner: {runner}'
 
 
@@ -349,10 +549,13 @@ def cmd_rm(args: argparse.Namespace, _: list[str]) -> None:
 def cmd_ls(args: argparse.Namespace, _: list[str]) -> None:
     ollama_models = get_ollama_models()
     hf_models = get_huggingface_models()
+    lmstudio_models = get_lmstudio_models()
+    llamacpp_models = get_llamacpp_models()
 
-    rows: list[tuple[str, str]] = [('ollama', m) for m in ollama_models] + [
-        ('mlx-lm / vllm-mlx', m) for m in hf_models
-    ]
+    rows: list[tuple[str, str]] = [('ollama', m) for m in ollama_models]
+    rows += [('mlx-lm / vllm-mlx', m) for m in hf_models]
+    rows += [('lmstudio', m) for m in lmstudio_models]
+    rows += [('llama.cpp', m) for m in llamacpp_models]
 
     if not rows:
         print('No local models found.')
@@ -387,7 +590,18 @@ def cmd_ps(args: argparse.Namespace, _: list[str]) -> None:
     pid = state.get('pid')
     started_at = state.get('started_at', 'unknown')
 
-    running = is_process_alive(pid) if pid else False
+    external = state.get('external', False)
+    if pid:
+        running = is_process_alive(pid)
+    elif external:
+        # Probe live endpoints (or `lms ps`) to confirm the externally
+        # managed model is still loaded.
+        running = any(
+            entry.get('runner') == runner and entry.get('model') == model
+            for entry in discover_running_models()
+        )
+    else:
+        running = False
     status = 'running' if running else 'stopped (stale state)'
 
     base_url = BASE_URL_TEMPLATES.get(runner, 'http://{host}:{port}').format(
@@ -476,18 +690,20 @@ def get_ollama_model_params(model: str) -> dict[str, float]:
         return {}
 
 
-def get_runner_default_params(
-    runner: str, model: str
-) -> dict[str, float]:
+def get_runner_default_params(runner: str, model: str) -> dict[str, float]:
     """Default parameter values applied by ``runner`` when a value is not
     explicitly set. For ollama, these are read from the model's Modelfile;
-    for mlx-lm and vllm-mlx they come from the upstream library defaults."""
+    for mlx-lm, vllm-mlx, and llama.cpp they come from upstream library
+    defaults. LMStudio applies sampling per-request, not at load time, so
+    no defaults are surfaced here."""
     if runner == 'ollama':
         return get_ollama_model_params(model)
     if runner == 'mlx-lm':
         return dict(MLX_LM_DEFAULT_PARAMS)
     if runner == 'vllm-mlx':
         return dict(VLLM_MLX_DEFAULT_PARAMS)
+    if runner == 'llama.cpp':
+        return dict(LLAMA_CPP_DEFAULT_PARAMS)
     return {}
 
 
@@ -702,8 +918,99 @@ def _build_run_cmd(
             VLLM_MLX_PARAM_FLAGS
         ) + passthrough, None
 
+    if runner == 'llama.cpp':
+        path = _get_runner_path('llama.cpp')
+        binary = path if path and Path(path).is_file() else 'llama-server'
+        gguf = resolve_llamacpp_model_path(model)
+        if gguf is not None:
+            model_args = ['-m', str(gguf)]
+        elif '/' in model and not model.endswith('.gguf'):
+            # HuggingFace repo identifier — llama-server downloads on first
+            # use into ~/.cache/llama.cpp/.
+            model_args = ['-hf', model]
+        else:
+            print(
+                f'Error: GGUF file not found for "{model}". '
+                'Provide a path under ~/.cache/llama.cpp, '
+                '~/.lmstudio/models, or the HuggingFace cache, '
+                'or a HuggingFace repo identifier (org/repo).',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        ctx_flags = ['-c', str(ctx)] if ctx is not None else []
+        cmd = [
+            binary,
+            *model_args,
+            '--host',
+            host,
+            '--port',
+            str(port),
+        ]
+        return cmd + ctx_flags + _param_flags(
+            LLAMA_CPP_PARAM_FLAGS
+        ) + passthrough, None
+
     print(f'Unknown runner: {runner}', file=sys.stderr)
     sys.exit(1)
+
+
+def _start_lmstudio(
+    model: str,
+    host: str,
+    port: int,
+    ctx: int | None,
+) -> dict:
+    """Ensure the LMStudio server is up on host:port, load *model*, and
+    return the state dict to persist."""
+    binary = _lmstudio_binary()
+    start_cmd = [
+        binary,
+        'server',
+        'start',
+        '-p',
+        str(port),
+        '--bind',
+        host,
+    ]
+    try:
+        subprocess.run(
+            start_cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as err:
+        print(
+            f'Error: lms server start failed: {err}\n'
+            'Is LMStudio installed and ~/.lmstudio/bin/lms on PATH?',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    load_cmd = [binary, 'load', model, '-y']
+    if ctx is not None:
+        load_cmd += ['-c', str(ctx)]
+    try:
+        subprocess.run(load_cmd, check=True)
+    except FileNotFoundError:
+        print('Error: lms binary not found.', file=sys.stderr)
+        sys.exit(1)
+    except subprocess.CalledProcessError as err:
+        print(f'Failed to load lmstudio model: {err}', file=sys.stderr)
+        sys.exit(1)
+
+    return {
+        'runner': 'lmstudio',
+        'model': model,
+        'host': host,
+        'port': port,
+        'pid': None,
+        'external': True,
+        'started_at': datetime.now().isoformat(timespec='seconds'),
+        'ctx': ctx,
+        'params': {},
+    }
 
 
 def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
@@ -731,6 +1038,19 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
         val = getattr(args, pname, None)
         if val is not None:
             params[pname] = val
+
+    if runner == 'lmstudio':
+        if passthrough:
+            print(
+                f'Warning: ignoring unknown arguments for lmstudio: '
+                f'{passthrough}',
+                file=sys.stderr,
+            )
+        print(f'Starting lmstudio: {model}  ({host}:{port})')
+        state = _start_lmstudio(model, host, port, ctx)
+        write_state(state)
+        print(f'lmstudio loaded: {model}. Use "llm stop" to unload.')
+        return
 
     env = os.environ.copy()
     if runner == 'ollama':
@@ -786,6 +1106,30 @@ def cmd_run(args: argparse.Namespace, passthrough: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _lmstudio_unload(model: str | None) -> None:
+    """Unload an LMStudio model via the ``lms`` CLI. Best-effort."""
+    binary = _lmstudio_binary()
+    cmd = [binary, 'unload']
+    if model:
+        cmd.append(model)
+    else:
+        cmd.append('-a')
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        if model:
+            print(f'Unloaded lmstudio model: {model}')
+        else:
+            print('Unloaded all lmstudio models.')
+    except (subprocess.CalledProcessError, FileNotFoundError) as err:
+        detail = ''
+        if isinstance(err, subprocess.CalledProcessError):
+            detail = (err.stderr or err.stdout or '').strip()
+        print(
+            f'Warning: failed to unload lmstudio model: {detail or err}',
+            file=sys.stderr,
+        )
+
+
 def cmd_stop(args: argparse.Namespace, _: list[str]) -> None:
     state = read_state()
     if not state:
@@ -796,6 +1140,14 @@ def cmd_stop(args: argparse.Namespace, _: list[str]) -> None:
     model = state.get('model')
     pid = state.get('pid')
     port = state.get('port')
+
+    # LMStudio runs as a persistent daemon; we unload the model rather than
+    # killing the process that hosts every other loaded model too.
+    if runner == 'lmstudio':
+        _lmstudio_unload(model)
+        clear_state()
+        print(f'Stopped {runner}: {model}')
+        return
 
     if pid and is_process_alive(pid):
         _kill_process(pid)
@@ -881,7 +1233,14 @@ def cmd_download(args: argparse.Namespace, _: list[str]) -> None:
         binary = path if path and Path(path).is_file() else 'ollama'
         cmd = [binary, 'pull', model]
         missing_hint = 'Install ollama from https://ollama.com'
+    elif runner == 'lmstudio':
+        cmd = [_lmstudio_binary(), 'get', model, '-y']
+        missing_hint = (
+            'Install LMStudio from https://lmstudio.ai and ensure '
+            '~/.lmstudio/bin/lms is on PATH.'
+        )
     else:
+        # mlx-lm, vllm-mlx, llama.cpp: download via HuggingFace CLI.
         cmd = _hf_download_cmd(model)
         missing_hint = (
             'Install the HuggingFace CLI with: brew install huggingface-cli'
@@ -929,6 +1288,22 @@ def _runner_executable(runner: str) -> tuple[str, bool]:
             return (path, exists)
         vllm = shutil.which('vllm')
         return (vllm, True) if vllm else ('not found', False)
+
+    if runner == 'lmstudio':
+        path = _get_runner_path('lmstudio')
+        if path:
+            exists = Path(path).is_file() and os.access(path, os.X_OK)
+            return (path, exists)
+        fallback = shutil.which('lms')
+        return (fallback, True) if fallback else ('not found', False)
+
+    if runner == 'llama.cpp':
+        path = _get_runner_path('llama.cpp')
+        if path:
+            exists = Path(path).is_file() and os.access(path, os.X_OK)
+            return (path, exists)
+        fallback = shutil.which('llama-server')
+        return (fallback, True) if fallback else ('not found', False)
 
     return ('unknown', False)
 
@@ -989,8 +1364,11 @@ def discover_running_models() -> list[dict]:
     except Exception:
         pass
 
-    # Check mlx-lm / vllm-mlx — they may share a port; query each unique port once.
-    for runner in ('mlx-lm', 'vllm-mlx'):
+    # Check mlx-lm / vllm-mlx / llama.cpp — they may share a port (8080);
+    # query each unique port once. Distinguishing which runner is serving on
+    # that port is best-effort: we attribute results to the runner whose
+    # configured port matches first.
+    for runner in ('mlx-lm', 'vllm-mlx', 'llama.cpp'):
         port = DEFAULT_PORTS[runner]
         if port in queried_ports:
             continue
@@ -1012,6 +1390,44 @@ def discover_running_models() -> list[dict]:
                 )
         except Exception:
             pass
+
+    # LMStudio — `lms ps --json` lists models actually loaded into memory.
+    # The /v1/models endpoint is misleading (it returns every downloaded
+    # model regardless of load state).
+    try:
+        binary = _lmstudio_binary()
+        status_proc = subprocess.run(
+            [binary, 'server', 'status', '--json'],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        port = DEFAULT_PORTS['lmstudio']
+        if status_proc.returncode == 0 and status_proc.stdout.strip():
+            status = json.loads(status_proc.stdout)
+            port = status.get('port') or port
+        ps_proc = subprocess.run(
+            [binary, 'ps', '--json'],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if ps_proc.returncode == 0 and ps_proc.stdout.strip():
+            loaded = json.loads(ps_proc.stdout)
+            for entry in loaded:
+                identifier = entry.get('identifier') or entry.get('modelKey')
+                if not identifier:
+                    continue
+                results.append(
+                    {
+                        'runner': 'lmstudio',
+                        'model': identifier,
+                        'host': DEFAULT_HOST,
+                        'port': port,
+                    }
+                )
+    except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        pass
 
     return results
 
@@ -1198,7 +1614,7 @@ def build_parser() -> argparse.ArgumentParser:
         help='Repetition penalty.',
     )
     run_parser.add_argument(
-         '--presence-penalty',
+        '--presence-penalty',
         dest='presence_penalty',
         type=float,
         default=None,
@@ -1206,13 +1622,13 @@ def build_parser() -> argparse.ArgumentParser:
         help='Presence penalty.',
     )
     run_parser.add_argument(
-         '--detach',
+        '--detach',
         action='store_true',
         default=False,
         help='Run the model as a persistent background process that survives CLI exit.',
     )
     run_parser.add_argument(
-         '--log',
+        '--log',
         default=None,
         metavar='PATH',
         help=(
@@ -1305,9 +1721,7 @@ def build_parser() -> argparse.ArgumentParser:
         'runner',
         help='Runner management commands.',
     )
-    runner_parser.set_defaults(
-        func=lambda args, _: runner_parser.print_help()
-    )
+    runner_parser.set_defaults(func=lambda args, _: runner_parser.print_help())
     runner_sub = runner_parser.add_subparsers(
         dest='runner_command',
         metavar='SUBCOMMAND',

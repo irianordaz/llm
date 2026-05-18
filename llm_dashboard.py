@@ -117,10 +117,15 @@ def run_detached(
     port: int,
     ctx: int | None = None,
     params: dict | None = None,
-) -> int:
-    """Spawn the model server detached. Writes state. Returns PID."""
+) -> int | None:
+    """Spawn the model server detached. Writes state. Returns PID, or
+    ``None`` for runners (lmstudio) that delegate to a persistent daemon."""
     if params is None:
         params = {}
+    if runner == 'lmstudio':
+        state = llm._start_lmstudio(model, host, port, ctx)
+        llm.write_state(state)
+        return None
     run_model = model
     if runner == 'ollama' and params:
         run_model = llm._get_ollama_custom_model(model, params)
@@ -170,6 +175,10 @@ def stop_running() -> tuple[bool, str]:
     runner = state.get('runner')
     model = state.get('model')
     port = state.get('port')
+    if runner == 'lmstudio':
+        llm._lmstudio_unload(model)
+        llm.clear_state()
+        return True, f'Stopped {runner}: {model}'
     if pid and llm.is_process_alive(pid):
         llm._kill_process(pid)
     elif port:
@@ -486,9 +495,13 @@ class ModelsTab(wx.Panel):
         self.list.DeleteAllItems()
         ollama_models = llm.get_ollama_models()
         hf_models = llm.get_huggingface_models()
+        lmstudio_models = llm.get_lmstudio_models()
+        llamacpp_models = llm.get_llamacpp_models()
         rows = [('ollama', m, 'ollama') for m in ollama_models]
         rows += [('mlx-lm', m, 'huggingface') for m in hf_models]
         rows += [('vllm-mlx', m, 'huggingface') for m in hf_models]
+        rows += [('lmstudio', m, 'lmstudio') for m in lmstudio_models]
+        rows += [('llama.cpp', m, 'gguf') for m in llamacpp_models]
         for runner, model, source in rows:
             idx = self.list.InsertItem(
                 self.list.GetItemCount(),
@@ -652,7 +665,7 @@ class RunnersTab(scrolled.ScrolledPanel):
             wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM,
             12,
         )
-        if runner in ('ollama', 'mlx-lm', 'vllm-mlx'):
+        if runner in llm.RUNNERS:
             row = wx.BoxSizer(wx.HORIZONTAL)
             row.AddStretchSpacer()
             btn = wx.Button(card, label='Set path\u2026')
@@ -912,30 +925,33 @@ class DownloadDialog(wx.Dialog):
         self.book = wx.Simplebook(self)
         self.book.SetBackgroundColour(tc('bg'))
 
-        # Ollama panel
-        ollama_panel = wx.Panel(self.book)
-        ollama_panel.SetBackgroundColour(tc('bg'))
+        # Simple name-input panel (used for ollama and lmstudio).
+        name_panel = wx.Panel(self.book)
+        name_panel.SetBackgroundColour(tc('bg'))
         op = wx.BoxSizer(wx.HORIZONTAL)
+        self.name_label = _label(name_panel, 'Model name', muted=True)
         op.Add(
-            _label(ollama_panel, 'Model name', muted=True),
+            self.name_label,
             0,
             wx.ALIGN_CENTER_VERTICAL | wx.RIGHT,
             8,
         )
-        self.ollama_model = wx.TextCtrl(
-            ollama_panel,
+        self.simple_model = wx.TextCtrl(
+            name_panel,
             size=(320, -1),
         )
-        _style_input(self.ollama_model)
-        self.ollama_model.SetHint(
+        _style_input(self.simple_model)
+        self.simple_model.SetHint(
             'e.g. llama3.2',
         )
-        op.Add(self.ollama_model, 1)
-        ollama_panel.SetSizer(op)
+        op.Add(self.simple_model, 1)
+        name_panel.SetSizer(op)
         self.book.AddPage(
-            ollama_panel,
-            'ollama',
+            name_panel,
+            'name',
         )
+        # Alias the old attribute name so legacy code paths still work.
+        self.ollama_model = self.simple_model
 
         # HuggingFace panel
         hf_panel = wx.Panel(self.book)
@@ -1072,10 +1088,21 @@ class DownloadDialog(wx.Dialog):
         self,
         event,
     ):
-        sel = self.runner.GetSelection()
-        self.book.SetSelection(
-            0 if sel == 0 else 1,
-        )
+        runner = llm.RUNNERS[self.runner.GetSelection()]
+        # ollama + lmstudio use the simple name-input panel; the rest use
+        # the HuggingFace search panel.
+        if runner == 'ollama':
+            self.name_label.SetLabel('Model name')
+            self.simple_model.SetHint('e.g. llama3.2')
+            self.book.SetSelection(0)
+        elif runner == 'lmstudio':
+            self.name_label.SetLabel('Model key')
+            self.simple_model.SetHint(
+                'e.g. openai/gpt-oss-20b or qwen/qwen3.5-9b@q8_0'
+            )
+            self.book.SetSelection(0)
+        else:
+            self.book.SetSelection(1)
         self.Layout()
 
     def _on_search(self, event):
@@ -1178,8 +1205,8 @@ class DownloadDialog(wx.Dialog):
 
     def get_values(self):
         runner = llm.RUNNERS[self.runner.GetSelection()]
-        if runner == 'ollama':
-            model = self.ollama_model.GetValue().strip()
+        if runner in ('ollama', 'lmstudio'):
+            model = self.simple_model.GetValue().strip()
         else:
             model = self.hf_model.GetValue().strip()
         return runner, model
@@ -1468,12 +1495,19 @@ class LlmFrame(wx.Frame):
                 ctx,
                 params,
             )
+            suffix = f'  (PID {pid})' if pid else ''
             self.SetStatusText(
-                f'Started {runner}: {model}  (PID {pid})',
+                f'Started {runner}: {model}{suffix}',
             )
             wx.CallLater(
                 400,
                 self.refresh_status,
+            )
+        except SystemExit as e:
+            wx.MessageBox(
+                f'Failed to start {runner}: {e}',
+                'Error',
+                wx.OK | wx.ICON_ERROR,
             )
         except Exception as e:
             wx.MessageBox(
@@ -1610,6 +1644,14 @@ class LlmFrame(wx.Frame):
                 'for both mlx-lm and '
                 'vllm-mlx.'
             )
+        elif runner == 'llama.cpp':
+            shared_note = (
+                '\n\nThis deletes the GGUF '
+                'file on disk. Any other '
+                'runner that pointed at it '
+                '(lmstudio, mlx-lm) will '
+                'lose access too.'
+            )
         dlg = wx.MessageDialog(
             self,
             f'Permanently delete {model}?{shared_note}',
@@ -1701,7 +1743,7 @@ class LlmFrame(wx.Frame):
 
         def _process_line(
             line,
-            is_ollama,
+            simple_pct,
         ):
             clean = _ANSI.sub(
                 '',
@@ -1709,7 +1751,7 @@ class LlmFrame(wx.Frame):
             ).strip()
             if not clean:
                 return
-            if is_ollama:
+            if simple_pct:
                 pm = _OLLAMA_PCT.search(
                     clean,
                 )
@@ -1740,7 +1782,7 @@ class LlmFrame(wx.Frame):
 
         def _read_stream(
             stream,
-            is_ollama,
+            simple_pct,
         ):
             buf = b''
             while True:
@@ -1764,12 +1806,13 @@ class LlmFrame(wx.Frame):
                             'utf-8',
                             errors='replace',
                         ),
-                        is_ollama,
+                        simple_pct,
                     )
                     buf = buf[pos + 1 :]
 
         def worker():
             is_ollama = runner == 'ollama'
+            is_lmstudio = runner == 'lmstudio'
             if is_ollama:
                 cmd = [
                     'ollama',
@@ -1779,6 +1822,18 @@ class LlmFrame(wx.Frame):
                 popen_kwargs = {
                     'stdout': subprocess.PIPE,
                     'stderr': subprocess.DEVNULL,
+                }
+                stream_key = 'stdout'
+            elif is_lmstudio:
+                cmd = [
+                    llm._lmstudio_binary(),
+                    'get',
+                    model,
+                    '-y',
+                ]
+                popen_kwargs = {
+                    'stdout': subprocess.PIPE,
+                    'stderr': subprocess.STDOUT,
                 }
                 stream_key = 'stdout'
             else:
@@ -1802,7 +1857,7 @@ class LlmFrame(wx.Frame):
                             proc,
                             stream_key,
                         ),
-                        is_ollama,
+                        is_ollama or is_lmstudio,
                     ),
                     daemon=True,
                 )
